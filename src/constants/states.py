@@ -1,7 +1,5 @@
 from enum import Enum
 
-from src.constants import utah_cities
-
 
 class State(Enum):
     ALABAMA = 'AL'
@@ -57,9 +55,3 @@ class State(Enum):
 
     def __init__(self, abbreviation):
         self.abbreviation = abbreviation
-#         self.cities = serviced_cities.get(abbreviation, [])
-#
-#
-# serviced_cities = {
-#     'UT': utah_cities
-# }

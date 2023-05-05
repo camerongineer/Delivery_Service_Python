@@ -1,39 +1,17 @@
 import csv
 import re
-from datetime import datetime
+from datetime import datetime, time
 
-from src.config import DELIVERY_RETURN_TIME
+from typing import List
+
+from src.config import DELIVERY_RETURN_TIME, STANDARD_PACKAGE_ARRIVAL_TIME
 from src.constants.delivery_status import DeliveryStatus
-from src.constants.states import State
 from src.constants.utah_cities import UtahCity
 from src.models.location import Location
 from src.models.package import Package
 
 
 class CsvParser:
-    @staticmethod
-    def initialize_packages(file_name):
-        packages = []
-        with open(file_name, newline='') as csv_file:
-            reader = csv.DictReader(csv_file)
-            for row in reader:
-                package_id = int(row['Package ID'])
-                address = row['Address']
-                state = State['UTAH']
-                city = UtahCity[row['City'].replace(" ", "_").upper()]
-                zip_code = int(row['Zip'])
-                is_verified_address = not row['Special Notes'].startswith('Wrong address')
-                deadline = DELIVERY_RETURN_TIME if row['Delivery Deadline'] == 'EOD' else\
-                    datetime.strptime(row['Delivery Deadline'], '%I:%M:%S %p').time()
-                weight = int(row['Mass KILO'])
-                status = DeliveryStatus['AT_HUB']
-                special_note = row['Special Notes']
-                packages.append(Package(package_id=package_id, address=address, city=city, state=state,
-                                        zip_code=zip_code, is_verified_address=is_verified_address, deadline=deadline,
-                                        weight=weight, status=status, special_note=special_note))
-
-        return packages
-
     @staticmethod
     def initialize_locations(filename):
         locations = []
@@ -76,3 +54,50 @@ class CsvParser:
 
                 locations[i].set_distance_dict(distance_dict)
         return locations
+
+    @staticmethod
+    def initialize_packages(file_name: str, locations: List[Location]):
+        packages = []
+        with open(file_name, newline='') as csv_file:
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                row: dict = row
+                package_id = int(row['Package ID'])
+                address: str = row['Address'].strip()
+                city = UtahCity[row['City'].replace(' ', '_').upper()]
+                zip_code = int(row['Zip'].strip())
+                package_location = None
+                for location in locations:
+                    if location.address == address and location.zip_code == zip_code:
+                        package_location = location
+                        break
+                if not package_location:
+                    raise ImportError
+                package_location.set_city(city)
+                is_verified_address = not row['Special Notes'].startswith('Wrong address')
+                deadline = DELIVERY_RETURN_TIME if row['Delivery Deadline'] == 'EOD' else\
+                    datetime.strptime(row['Delivery Deadline'], '%I:%M:%S %p').time()
+                weight = int(row['Mass KILO'])
+                status = DeliveryStatus['ON_ROUTE_TO_DEPOT']
+                special_note = row['Special Notes']
+                package = Package(package_id=package_id, location=package_location,
+                                        is_verified_address=is_verified_address, deadline=deadline,
+                                        weight=weight, status=status, special_note=special_note)
+                _set_arrival_time(package)
+                packages.append(package)
+        return packages
+
+
+def _set_arrival_time(package: Package):
+    if str(package.special_note).startswith('Delayed'):
+        match = re.search(r'(\d{1,2}):(\d{2})\s+(am|pm)', package.special_note)
+        if match:
+            hour = int(match.group(1))
+            minute = int(match.group(2))
+            if match.group(3) == 'pm' and hour != 12:
+                hour += 12
+            elif match.group(3) == 'am' and hour == 12:
+                hour = 0
+            package.hub_arrival_time = time(hour=hour, minute=minute)
+    else:
+        package.hub_arrival_time = STANDARD_PACKAGE_ARRIVAL_TIME

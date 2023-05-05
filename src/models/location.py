@@ -1,10 +1,17 @@
+from src.constants.utah_cities import UtahCity
+
+
 class Location:
     def __init__(self, name: str, address: str, is_hub=False):
         self.name = name
         self.address = address
-        self.is_hub = is_hub
+        self.city = None
         self.zip_code = None
         self.distance_dict = dict()
+        self.is_hub = is_hub
+
+    def set_city(self, city: UtahCity):
+        self.city = city
 
     def set_zip_code(self, zip_code: int):
         self.zip_code = zip_code
@@ -25,4 +32,3 @@ class Location:
 
     def __repr__(self):
         return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub} zip_code={self.zip_code})"
-
