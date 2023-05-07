@@ -1,17 +1,16 @@
 from unittest import TestCase
 
-from src.config import PACKAGE_CSV_FILE, DISTANCE_CSV_FILE, NUM_TRUCK_CAPACITY
-from src.models.package import Package
-from src.utilities.csv_parser import CsvParser
-from src.utilities.custom_hash import CustomHash
+from src import config
+from src.models import Package
+from src.utilities import CsvParser, CustomHash
 
 
 class TestCustomHash(TestCase):
 
     def setUp(self) -> None:
-        self.locations = CsvParser.initialize_locations(DISTANCE_CSV_FILE)
-        self.packages = CsvParser.initialize_packages(PACKAGE_CSV_FILE, self.locations)
-        self.custom_hash = CustomHash(NUM_TRUCK_CAPACITY)
+        self.locations = CsvParser.initialize_locations(config.DISTANCE_CSV_FILE)
+        self.packages = CsvParser.initialize_packages(config.PACKAGE_CSV_FILE, self.locations)
+        self.custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
 
     def test_add_package(self):
         for i in range(1, 41):

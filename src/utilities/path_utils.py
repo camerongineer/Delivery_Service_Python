@@ -1,5 +1,7 @@
 import os
 
+__all__ = ['PathUtils']
+
 
 class PathUtils:
     @staticmethod

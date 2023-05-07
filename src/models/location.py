@@ -1,4 +1,6 @@
-from src.constants.utah_cities import UtahCity
+from src.constants import UtahCity
+
+__all__ = ['Location']
 
 
 class Location:
@@ -9,6 +11,7 @@ class Location:
         self.zip_code = None
         self.distance_dict = dict()
         self.is_hub = is_hub
+        self.been_visited = False
 
     def set_city(self, city: UtahCity):
         self.city = city
@@ -24,11 +27,11 @@ class Location:
 
     def __eq__(self, other):
         if isinstance(other, Location):
-            return self.address == other.address
+            return self.address == other.address and self.name == other.name and self.zip_code == other.zip_code
         return False
 
     def __hash__(self):
-        return hash(self.address)
+        return hash(self.address + self.name)
 
     def __repr__(self):
         return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub} zip_code={self.zip_code})"

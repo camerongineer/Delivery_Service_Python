@@ -1,15 +1,14 @@
-from src.models.package import Package
+from src.models import Package
+
+__all__ = ['CustomHash']
 
 
 class CustomHash:
-    _hash_id = 1
 
     def __init__(self, capacity: int):
         self.capacity = capacity
         self.arr: list = [[]] * capacity
         self._size = 0
-        self.id = CustomHash._hash_id
-        CustomHash._hash_id += 1
 
     def __len__(self):
         return self._size

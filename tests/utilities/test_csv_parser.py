@@ -1,18 +1,16 @@
 from datetime import time
 from unittest import TestCase
 
-from src.config import DISTANCE_CSV_FILE, PACKAGE_CSV_FILE
-from src.constants.delivery_status import DeliveryStatus
-from src.constants.states import State
-from src.constants.utah_cities import UtahCity
-from src.models.location import Location
-from src.utilities.csv_parser import CsvParser
+from src import config
+from src.constants import UtahCity, State, DeliveryStatus
+from src.models import Location
+from src.utilities import CsvParser
 
 
 class TestCsvParser(TestCase):
     def setUp(self) -> None:
-        self.locations = CsvParser.initialize_locations(DISTANCE_CSV_FILE)
-        self.packages = CsvParser.initialize_packages(PACKAGE_CSV_FILE, self.locations)
+        self.locations = CsvParser.initialize_locations(config.DISTANCE_CSV_FILE)
+        self.packages = CsvParser.initialize_packages(config.PACKAGE_CSV_FILE, self.locations)
 
     def test_initialize_packages(self):
         for package in self.packages:
@@ -22,7 +20,7 @@ class TestCsvParser(TestCase):
             assert package.location.city.state and isinstance(package.location.city.state, State)
             assert package.deadline and isinstance(package.deadline, time)
             assert package.weight and isinstance(package.weight, int)
-            assert package.status == DeliveryStatus.ON_ROUTE_TO_DEPOT
+            assert package.status == DeliveryStatus.ON_ROUTE_TO_DEPOT if package.special_note.startswith('Delayed') else DeliveryStatus.AT_HUB
 
     def test_initialize_locations(self):
         hubs = 0

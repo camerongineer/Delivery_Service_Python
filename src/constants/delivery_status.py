@@ -1,5 +1,7 @@
 from enum import Enum
 
+__all__ = ['DeliveryStatus']
+
 
 class DeliveryStatus(Enum):
     ON_ROUTE_TO_DEPOT = 'On route to delivery facility'

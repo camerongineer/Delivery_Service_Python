@@ -1,6 +1,8 @@
 from enum import Enum
 
-from src.constants.states import State
+from src.constants import State
+
+__all__ = ['UtahCity']
 
 
 class UtahCity(Enum):

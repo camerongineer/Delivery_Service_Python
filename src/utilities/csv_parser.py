@@ -1,14 +1,13 @@
 import csv
 import re
 from datetime import datetime, time
-
 from typing import List
 
-from src.config import DELIVERY_RETURN_TIME, STANDARD_PACKAGE_ARRIVAL_TIME
-from src.constants.delivery_status import DeliveryStatus
-from src.constants.utah_cities import UtahCity
-from src.models.location import Location
-from src.models.package import Package
+from src import config
+from src.constants import UtahCity, DeliveryStatus
+from src.models import Location, Package
+
+__all__ = ['CsvParser']
 
 
 class CsvParser:
@@ -74,15 +73,18 @@ class CsvParser:
                 if not package_location:
                     raise ImportError
                 package_location.set_city(city)
-                is_verified_address = not row['Special Notes'].startswith('Wrong address')
-                deadline = DELIVERY_RETURN_TIME if row['Delivery Deadline'] == 'EOD' else\
+                deadline = config.DELIVERY_RETURN_TIME if row['Delivery Deadline'] == 'EOD' else \
                     datetime.strptime(row['Delivery Deadline'], '%I:%M:%S %p').time()
                 weight = int(row['Mass KILO'])
-                status = DeliveryStatus['ON_ROUTE_TO_DEPOT']
                 special_note = row['Special Notes']
+                is_verified_address = not special_note.startswith('Wrong address')
+                if special_note.startswith('Delayed'):
+                    status = DeliveryStatus.ON_ROUTE_TO_DEPOT
+                else:
+                    status = DeliveryStatus.AT_HUB
                 package = Package(package_id=package_id, location=package_location,
-                                        is_verified_address=is_verified_address, deadline=deadline,
-                                        weight=weight, status=status, special_note=special_note)
+                                  is_verified_address=is_verified_address, deadline=deadline,
+                                  weight=weight, status=status, special_note=special_note)
                 _set_arrival_time(package)
                 packages.append(package)
         return packages
@@ -100,4 +102,4 @@ def _set_arrival_time(package: Package):
                 hour = 0
             package.hub_arrival_time = time(hour=hour, minute=minute)
     else:
-        package.hub_arrival_time = STANDARD_PACKAGE_ARRIVAL_TIME
+        package.hub_arrival_time = config.STANDARD_PACKAGE_ARRIVAL_TIME

@@ -1,7 +1,9 @@
 import math
 
-import src.constants.delivery_status as delivery_status
-from src.models.location import Location
+from src.constants import delivery_status
+from src.models import Location
+
+__all__ = ['Package']
 
 
 class Package:
@@ -22,10 +24,13 @@ class Package:
         return hash(self.package_id)
 
     def __repr__(self):
-        return f"Package(package_id={self.package_id}, is_verified_address={self.is_verified_address}, deadline=datetime.strptime('{self.deadline}', '%I:%M:%S'), weight={self.weight}, status={self.status}, special_note='{self.special_note}')"
+        return f"Package(package_id={self.package_id}, is_verified_address={self.is_verified_address}," \
+               f" deadline=datetime.strptime('{self.deadline}', '%I:%M:%S'), weight={self.weight}," \
+               f" status={self.status}, special_note='{self.special_note}')"
 
     def __eq__(self, other):
-        return self.location is other.location or math.isclose((self.location.distance_dict.values()), sum(other.location.distance_dict.values()))
+        return self.location is other.location or\
+            math.isclose((self.location.distance_dict.values()), sum(other.location.distance_dict.values()))
 
     def __lt__(self, other):
         return sum(self.location.distance_dict.values()) < sum(other.location.distance_dict.values())
@@ -34,10 +39,12 @@ class Package:
         return sum(self.location.distance_dict.values()) > sum(other.location.distance_dict.values())
 
     def __le__(self, other):
-        return self.location is other.location or sum(self.location.distance_dict.values()) <= sum(other.location.distance_dict.values())
+        return self.location is other.location or\
+            sum(self.location.distance_dict.values()) <= sum(other.location.distance_dict.values())
 
     def __ge__(self, other):
-        return self.location is other.location or sum(self.location.distance_dict.values()) >= sum(other.location.distance_dict.values())
+        return self.location is other.location or\
+            sum(self.location.distance_dict.values()) >= sum(other.location.distance_dict.values())
 
     def get_id(self) -> int:
         return self.package_id
