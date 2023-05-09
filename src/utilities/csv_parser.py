@@ -4,17 +4,49 @@ from datetime import datetime, time
 from typing import List
 
 from src import config
-from src.constants import UtahCity, DeliveryStatus
-from src.models import Location, Package
+from src.constants.utah_cities import UtahCity
+from src.models.location import Location
+from src.models.package import Package
+from src.models.truck import Truck
+
 
 __all__ = ['CsvParser']
 
 
+def _set_arrival_time(package: Package):
+    if package.special_note.startswith('Delayed'):
+        match = re.search(r'(\d{1,2}):(\d{2})\s+(am|pm)', package.special_note)
+        if match:
+            hour = int(match.group(1))
+            minute = int(match.group(2))
+            if match.group(3) == 'pm' and hour != 12:
+                hour += 12
+            elif match.group(3) == 'am' and hour == 12:
+                hour = 0
+            package.hub_arrival_time = time(hour=hour, minute=minute)
+    else:
+        package.hub_arrival_time = config.STANDARD_PACKAGE_ARRIVAL_TIME
+
+
+def _set_assigned_truck(package: Package):
+    if package.special_note.startswith('Can only be on truck '):
+        pattern = r'\d+'
+        match = re.findall(pattern, package.special_note).pop()
+        package.assigned_truck_id = int(match)
+
+
+def _set_earliest_location_deadline(location: Location, in_deadline_time: time):
+    current_location_deadline = datetime.combine(datetime.min, location.earliest_deadline)
+    in_deadline = datetime.combine(datetime.min, in_deadline_time)
+    if in_deadline < current_location_deadline:
+        location.earliest_deadline = in_deadline_time
+
+
 class CsvParser:
     @staticmethod
-    def initialize_locations(filename):
+    def initialize_locations(filepath=config.DISTANCE_CSV_FILE):
         locations = []
-        with open(filename) as csv_file:
+        with open(filepath) as csv_file:
             columns = csv.reader(csv_file).__next__()
             for column in columns[2:]:
                 name, address, *overflow = column.split('\n')
@@ -38,6 +70,7 @@ class CsvParser:
                 name = str(name_address_rows[i].split('\n')[0]).strip()
                 if str(address_zip_rows[i]).strip() == 'HUB':
                     locations[i].set_location_as_hub()
+                    Truck.hub_location = locations[i]
                 zip_match = re.search(r'\((\d+)\)', address_zip_rows[i])
                 if zip_match:
                     zip_code = int(zip_match.group(1))
@@ -55,9 +88,9 @@ class CsvParser:
         return locations
 
     @staticmethod
-    def initialize_packages(file_name: str, locations: List[Location]):
+    def initialize_packages(locations: List[Location], filepath=config.PACKAGE_CSV_FILE):
         packages = []
-        with open(file_name, newline='') as csv_file:
+        with open(filepath, newline='') as csv_file:
             reader = csv.DictReader(csv_file)
             for row in reader:
                 row: dict = row
@@ -78,28 +111,11 @@ class CsvParser:
                 weight = int(row['Mass KILO'])
                 special_note = row['Special Notes']
                 is_verified_address = not special_note.startswith('Wrong address')
-                if special_note.startswith('Delayed'):
-                    status = DeliveryStatus.ON_ROUTE_TO_DEPOT
-                else:
-                    status = DeliveryStatus.AT_HUB
                 package = Package(package_id=package_id, location=package_location,
                                   is_verified_address=is_verified_address, deadline=deadline,
-                                  weight=weight, status=status, special_note=special_note)
+                                  weight=weight, special_note=special_note)
                 _set_arrival_time(package)
+                _set_earliest_location_deadline(package.location, package.deadline)
+                _set_assigned_truck(package)
                 packages.append(package)
         return packages
-
-
-def _set_arrival_time(package: Package):
-    if str(package.special_note).startswith('Delayed'):
-        match = re.search(r'(\d{1,2}):(\d{2})\s+(am|pm)', package.special_note)
-        if match:
-            hour = int(match.group(1))
-            minute = int(match.group(2))
-            if match.group(3) == 'pm' and hour != 12:
-                hour += 12
-            elif match.group(3) == 'am' and hour == 12:
-                hour = 0
-            package.hub_arrival_time = time(hour=hour, minute=minute)
-    else:
-        package.hub_arrival_time = config.STANDARD_PACKAGE_ARRIVAL_TIME

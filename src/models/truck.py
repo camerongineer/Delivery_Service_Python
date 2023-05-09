@@ -1,29 +1,70 @@
-from src import config
-from src.models import Package
-from src.utilities import custom_hash
+from datetime import time, datetime
+
+
+
 
 __all__ = ['Truck']
 
+from src import config
+from src.models.location import Location
+from src.models.package import Package
+from src.utilities.custom_hash import CustomHash
 
-class Truck(custom_hash.CustomHash):
-    id_count = 1
 
-    def __init__(self):
+def _get_seconds_since_midnight(in_time: time) -> float:
+    midnight = datetime.combine(datetime.min, time.min)
+    return (datetime.combine(datetime.min, in_time) - midnight).total_seconds()
+
+
+def _get_seconds_between_times(start_time: time, end_time: time) -> int:
+    return (datetime.combine(datetime.min, end_time) - datetime.combine(datetime.min, start_time)).seconds
+
+
+class Truck(CustomHash):
+    hub_location = None
+
+    def __init__(self, truck_id: int):
         super().__init__(config.NUM_TRUCK_CAPACITY)
+        self._truck_id = truck_id
         self._has_driver = False
-        self._truck_id = Truck.id_count
-        self._mileage = 0
-        self._stopped = True
+        self._dispatch_time = None
+        self._completion_time = None
+        self._previous_location = None
+        self._next_location = None
+        self._travel_ledger = dict()
+        self._pause_ledger = dict()
 
-    def add_package(self, package: Package):
-        if self._size >= config.NUM_TRUCK_CAPACITY:
-            pass
-            #print('Truck is at maximum capacity')
-        super().add_package(package)
+    @property
+    def truck_id(self):
+        return self._truck_id
 
     @property
     def has_driver(self):
         return self._has_driver
+
+    @property
+    def dispatch_time(self):
+        return self._dispatch_time
+
+    @property
+    def completion_time(self):
+        return self._completion_time
+
+    @property
+    def previous_location(self):
+        return self._previous_location
+
+    @property
+    def next_location(self):
+        return self._next_location
+
+    @dispatch_time.setter
+    def dispatch_time(self, value: time):
+        self._dispatch_time = value
+
+    @completion_time.setter
+    def completion_time(self, value: time):
+        self._completion_time = value
 
     @has_driver.setter
     def has_driver(self, value):
@@ -32,11 +73,53 @@ class Truck(custom_hash.CustomHash):
         else:
             self._has_driver = False
 
-    @property
-    def truck_id(self):
-        return self._truck_id
+    @previous_location.setter
+    def previous_location(self, value: Location):
+        self._previous_location = value
 
-    @truck_id.setter
-    def truck_id(self, value):
-        self._truck_id = Truck.id_count
-        Truck.id_count += 1
+    @next_location.setter
+    def next_location(self, value: Location):
+        self._next_location = value
+
+    def add_package(self, package: Package):
+        if self._size >= config.NUM_TRUCK_CAPACITY:
+            pass
+            #print('Truck is at maximum capacity')
+        super().add_package(package)
+
+    def update_travel_ledger(self, start_travel_time: time):
+        self._travel_ledger[start_travel_time] = (self.previous_location, self.next_location)
+
+    def pause(self, pause_start: time, pause_end: time):
+        self._pause_ledger[pause_start] = pause_end
+
+    def return_to_hub(self):
+        hub_return = (self._previous_location, Truck.hub_location)
+
+    def get_mileage(self, current_time: time):
+        if _get_seconds_between_times(current_time, self._dispatch_time) <= 0:
+            return 0.0
+        if self._completion_time:
+            current_time = self._completion_time
+        time_difference = _get_seconds_between_times(self._dispatch_time, current_time)
+        time_difference -= self._total_paused_seconds(current_time)
+        miles_per_second = config.DELIVERY_TRUCK_MPH / 3600
+        return time_difference * miles_per_second
+
+    def get_current_location(self, current_time: time):
+        mileage = self.get_mileage(current_time)
+        sorted_stop_miles = sorted(self._travel_ledger.keys(), key=lambda location_mileage: float(location_mileage))
+        for i in range(len(sorted_stop_miles) - 1):
+            if mileage == sorted_stop_miles[i]:
+                return self._travel_ledger[i][0]
+            elif sorted_stop_miles[i] < mileage < sorted_stop_miles[i + 1]:
+                return self._travel_ledger[sorted_stop_miles[i]]
+        return None
+
+    def _total_paused_seconds(self, current_time: time) -> int:
+        total_paused_seconds = 0
+        for pause_start_time, pause_end_time in self._pause_ledger.items():
+            if pause_start_time < current_time:
+                time_to_compare = pause_end_time if pause_end_time < current_time else current_time
+                total_paused_seconds += _get_seconds_between_times(pause_start_time, time_to_compare)
+        return total_paused_seconds

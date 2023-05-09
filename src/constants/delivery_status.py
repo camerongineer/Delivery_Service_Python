@@ -9,3 +9,6 @@ class DeliveryStatus(Enum):
     LOADED = 'Loaded on truck'
     OUT_FOR_DELIVERY = 'Out for delivery'
     DELIVERED = 'Package delivered'
+
+    def __init__(self, description):
+        self.description = description

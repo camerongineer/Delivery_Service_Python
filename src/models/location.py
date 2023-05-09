@@ -1,6 +1,11 @@
-from src.constants import UtahCity
+
 
 __all__ = ['Location']
+
+from datetime import time
+
+from src.config import DELIVERY_RETURN_TIME
+from src.constants.utah_cities import UtahCity
 
 
 class Location:
@@ -12,6 +17,8 @@ class Location:
         self.distance_dict = dict()
         self.is_hub = is_hub
         self.been_visited = False
+        self.been_routed = False
+        self.earliest_deadline = DELIVERY_RETURN_TIME
 
     def set_city(self, city: UtahCity):
         self.city = city
@@ -24,6 +31,9 @@ class Location:
 
     def set_distance_dict(self, distance_dict):
         self.distance_dict = distance_dict
+
+    def set_earliest_deadline(self, deadline: time):
+        self.earliest_deadline = deadline
 
     def __eq__(self, other):
         if isinstance(other, Location):

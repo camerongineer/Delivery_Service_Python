@@ -8,8 +8,8 @@ from src.utilities import CsvParser, CustomHash
 class TestCustomHash(TestCase):
 
     def setUp(self) -> None:
-        self.locations = CsvParser.initialize_locations(config.DISTANCE_CSV_FILE)
-        self.packages = CsvParser.initialize_packages(config.PACKAGE_CSV_FILE, self.locations)
+        self.locations = CsvParser.initialize_locations()
+        self.packages = CsvParser.initialize_packages(self.locations)
         self.custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
 
     def test_add_package(self):
@@ -41,3 +41,8 @@ class TestCustomHash(TestCase):
                 assert self.custom_hash.remove_package(package_id)
             assert len(self.custom_hash) == 0
 
+    def test_add_all_package(self):
+        self.custom_hash.add_all_packages(self.packages)
+        assert len(self.packages) == len(self.custom_hash)
+        for package in self.packages:
+            assert self.custom_hash.get_package(package.package_id) is package

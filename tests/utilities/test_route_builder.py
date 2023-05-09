@@ -2,15 +2,28 @@ from datetime import time
 from unittest import TestCase
 
 from src import config
-from src.utilities import CsvParser, PackageHandler, RouteBuilder
+from src.models.truck import Truck
+from src.utilities.route_builder import RouteBuilder
 
 
 class TestRouteBuilder(TestCase):
 
-    def setUp(self) -> None:
-        self.locations = CsvParser.initialize_locations(config.DISTANCE_CSV_FILE)
-        self.packages = CsvParser.initialize_packages(config.PACKAGE_CSV_FILE, self.locations)
-        self.custom_hash = PackageHandler.load_packages(self.packages)
+    # def setUp(self) -> None:
+    #     self.locations = CsvParser.initialize_locations()
+    #     self.packages = CsvParser.initialize_packages(self.locations)
+    #     self.custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
+    #     for package in self.packages:
+    #         self.custom_hash.add_package(package)
+
+    def test_get_optimized_route(self):
+        truck = Truck(2)
+        manifest = RouteBuilder.get_optimized_route(truck)
+        truck.dispatch_time = config.DELIVERY_DISPATCH_TIME
+        # truck.pause(time(hour=9), time(hour=9, minute=30))
+        current_time = time(hour=10)
+        print(truck._travel_ledger)
+        print(truck.get_mileage(current_time))
+        print(truck.get_current_location(current_time))
 
     def test_get_location_packages(self):
         sole_package_at_location = self.custom_hash.get_package(22)
@@ -61,8 +74,10 @@ class TestRouteBuilder(TestCase):
         for package in self.packages:
             if str(package.special_note).startswith('Can only be on truck '):
                 assert package.package_id in required_package_ids
+                assert package.assigned_truck_id == required_truck_id
             else:
                 assert package.package_id not in required_package_ids
+                assert not package.assigned_truck_id
 
     def test_get_all_packages_at_assigned_truck_locations(self):
         assigned_truck_bundle = RouteBuilder.get_assigned_truck_packages(self.packages, truck_id=2)

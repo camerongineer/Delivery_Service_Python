@@ -1,16 +1,17 @@
-from datetime import time
+from datetime import time, datetime
 from unittest import TestCase
 
-from src import config
-from src.constants import UtahCity, State, DeliveryStatus
-from src.models import Location
-from src.utilities import CsvParser
+from src.constants.delivery_status import DeliveryStatus
+from src.constants.states import State
+from src.constants.utah_cities import UtahCity
+from src.models.location import Location
+from src.utilities.csv_parser import CsvParser
 
 
 class TestCsvParser(TestCase):
     def setUp(self) -> None:
-        self.locations = CsvParser.initialize_locations(config.DISTANCE_CSV_FILE)
-        self.packages = CsvParser.initialize_packages(config.PACKAGE_CSV_FILE, self.locations)
+        self.locations = CsvParser.initialize_locations()
+        self.packages = CsvParser.initialize_packages(self.locations)
 
     def test_initialize_packages(self):
         for package in self.packages:
@@ -20,7 +21,11 @@ class TestCsvParser(TestCase):
             assert package.location.city.state and isinstance(package.location.city.state, State)
             assert package.deadline and isinstance(package.deadline, time)
             assert package.weight and isinstance(package.weight, int)
-            assert package.status == DeliveryStatus.ON_ROUTE_TO_DEPOT if package.special_note.startswith('Delayed') else DeliveryStatus.AT_HUB
+            assert package.status is DeliveryStatus.ON_ROUTE_TO_DEPOT
+            assert package.assigned_truck_id \
+                if package.special_note.startswith('Can only be on truck ') else not package.assigned_truck_id
+            assert datetime.combine(datetime.min, package.location.earliest_deadline) <= \
+                   datetime.combine(datetime.min, package.deadline)
 
     def test_initialize_locations(self):
         hubs = 0
@@ -40,6 +45,7 @@ class TestCsvParser(TestCase):
         for location in self.locations:
             total_in_location_dict = 0
             for other_location in location.distance_dict.keys():
+                assert other_location is not location
                 if other_location in location.distance_dict.keys():
                     total_in_location_dict += 1
             assert total_in_location_dict == len(self.locations) - 1
