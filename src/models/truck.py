@@ -1,4 +1,4 @@
-from datetime import time, datetime
+from datetime import time
 
 
 
@@ -9,15 +9,7 @@ from src import config
 from src.models.location import Location
 from src.models.package import Package
 from src.utilities.custom_hash import CustomHash
-
-
-def _get_seconds_since_midnight(in_time: time) -> float:
-    midnight = datetime.combine(datetime.min, time.min)
-    return (datetime.combine(datetime.min, in_time) - midnight).total_seconds()
-
-
-def _get_seconds_between_times(start_time: time, end_time: time) -> int:
-    return (datetime.combine(datetime.min, end_time) - datetime.combine(datetime.min, start_time)).seconds
+from src.utilities.time_conversion import TimeConversion
 
 
 class Truck(CustomHash):
@@ -87,21 +79,18 @@ class Truck(CustomHash):
             #print('Truck is at maximum capacity')
         super().add_package(package)
 
-    def update_travel_ledger(self, start_travel_time: time):
-        self._travel_ledger[start_travel_time] = (self.previous_location, self.next_location)
+    def set_travel_ledger(self, travel_ledger: dict):
+        self._travel_ledger = travel_ledger
 
     def pause(self, pause_start: time, pause_end: time):
         self._pause_ledger[pause_start] = pause_end
 
-    def return_to_hub(self):
-        hub_return = (self._previous_location, Truck.hub_location)
-
     def get_mileage(self, current_time: time):
-        if _get_seconds_between_times(current_time, self._dispatch_time) <= 0:
+        time_difference = TimeConversion.get_seconds_between_times(self._dispatch_time, current_time)
+        if time_difference == 0:
             return 0.0
         if self._completion_time:
             current_time = self._completion_time
-        time_difference = _get_seconds_between_times(self._dispatch_time, current_time)
         time_difference -= self._total_paused_seconds(current_time)
         miles_per_second = config.DELIVERY_TRUCK_MPH / 3600
         return time_difference * miles_per_second
@@ -121,5 +110,11 @@ class Truck(CustomHash):
         for pause_start_time, pause_end_time in self._pause_ledger.items():
             if pause_start_time < current_time:
                 time_to_compare = pause_end_time if pause_end_time < current_time else current_time
-                total_paused_seconds += _get_seconds_between_times(pause_start_time, time_to_compare)
+                total_paused_seconds += TimeConversion.get_seconds_between_times(pause_start_time, time_to_compare)
         return total_paused_seconds
+
+    def is_paused(self, current_time):
+        for pause_start, pause_end in self._pause_ledger.items():
+            if pause_start <= current_time < pause_end:
+                return True
+        return False

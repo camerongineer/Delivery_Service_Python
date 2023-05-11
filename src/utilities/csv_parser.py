@@ -42,6 +42,16 @@ def _set_earliest_location_deadline(location: Location, in_deadline_time: time):
         location.earliest_deadline = in_deadline_time
 
 
+def _set_latest_location_package_arrival(location: Location, in_arrival_time: time):
+    if not location.latest_package_arrival:
+        location.latest_package_arrival = in_arrival_time
+    else:
+        current_latest_location_arrival = datetime.combine(datetime.min, location.latest_package_arrival)
+        in_arrival = datetime.combine(datetime.min, in_arrival_time)
+        if in_arrival > current_latest_location_arrival:
+            location.latest_package_arrival = in_arrival_time
+
+
 class CsvParser:
     @staticmethod
     def initialize_locations(filepath=config.DISTANCE_CSV_FILE):
@@ -116,6 +126,7 @@ class CsvParser:
                                   weight=weight, special_note=special_note)
                 _set_arrival_time(package)
                 _set_earliest_location_deadline(package.location, package.deadline)
+                _set_latest_location_package_arrival(package.location, package.hub_arrival_time)
                 _set_assigned_truck(package)
                 packages.append(package)
         return packages

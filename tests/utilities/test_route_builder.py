@@ -3,25 +3,33 @@ from unittest import TestCase
 
 from src import config
 from src.models.truck import Truck
+from src.utilities.csv_parser import CsvParser
+from src.utilities.custom_hash import CustomHash
 from src.utilities.route_builder import RouteBuilder
+from src.utilities.time_conversion import TimeConversion
 
 
 class TestRouteBuilder(TestCase):
 
-    # def setUp(self) -> None:
-    #     self.locations = CsvParser.initialize_locations()
-    #     self.packages = CsvParser.initialize_packages(self.locations)
-    #     self.custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
-    #     for package in self.packages:
-    #         self.custom_hash.add_package(package)
+    def setUp(self) -> None:
+        self.locations = CsvParser.initialize_locations()
+        self.packages = CsvParser.initialize_packages(self.locations)
+        self.custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
+        for package in self.packages:
+            self.custom_hash.add_package(package)
 
     def test_get_optimized_route(self):
         truck = Truck(2)
-        manifest = RouteBuilder.get_optimized_route(truck)
+        truck.pause(time(hour=8, minute=0), time(hour=8, minute=55))
+        truck.pause(time(hour=10, minute=37), time(hour=11, minute=37))
+        RouteBuilder.get_optimized_route(truck)
         truck.dispatch_time = config.DELIVERY_DISPATCH_TIME
         # truck.pause(time(hour=9), time(hour=9, minute=30))
         current_time = time(hour=10)
-        print(truck._travel_ledger)
+
+        for mile, (stop_time, current_location, next_location) in truck._travel_ledger.items():
+            print(f'miles={mile:1f}, time={stop_time}, location={next_location.name}, address={next_location.address}')
+        print(len(truck._travel_ledger))
         print(truck.get_mileage(current_time))
         print(truck.get_current_location(current_time))
 

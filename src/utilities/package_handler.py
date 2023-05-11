@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import time, datetime
 from typing import List, Set
 
 
@@ -9,10 +9,19 @@ from src.constants.delivery_status import DeliveryStatus
 from src.models.location import Location
 from src.models.package import Package
 from src.models.truck import Truck
+from src.utilities.time_conversion import TimeConversion
+
+
+def _is_loadable_package_set(truck: Truck, in_package_set: Set[Package]) -> bool:
+    for in_package in in_package_set:
+        if in_package.status is not DeliveryStatus.AT_HUB:
+            return False
+        if in_package.assigned_truck_id and in_package.assigned_truck_id != truck.truck_id:
+            return False
+    return True
 
 
 class PackageHandler:
-
     @staticmethod
     def load_packages(current_time: time, truck: Truck, package_sets: List[Set[Package]]):
         for package_set in package_sets:
@@ -39,19 +48,16 @@ class PackageHandler:
         return False
 
     @staticmethod
-    def bulk_status_update(current_time: time, delivery_status: DeliveryStatus, packages: List[Package]):
+    def bulk_status_update(current_time: time, updated_status: DeliveryStatus, packages: List[Package]):
         for package in packages:
-            if delivery_status is DeliveryStatus.AT_HUB and\
-                    package.status is DeliveryStatus.ON_ROUTE_TO_DEPOT and\
-                    current_time >= package.hub_arrival_time:
-                print(f'Package: {package.package_id:02} status changed from "{package.status.description}" to "{delivery_status.description}"')
-                package.update_status(delivery_status, current_time)
+            if package.status is DeliveryStatus.ON_ROUTE_TO_DEPOT and\
+                    TimeConversion.is_time_at_or_before_other_time(package.hub_arrival_time, current_time):
+                print(f'Package: {package.package_id:02} status changed from "{package.status.description}" to "{updated_status.description}"')
+                package.update_status(updated_status, current_time)
 
-
-def _is_loadable_package_set(truck: Truck, in_package_set: Set[Package]) -> bool:
-    for in_package in in_package_set:
-        if in_package.status is not DeliveryStatus.AT_HUB:
-            return False
-        if in_package.assigned_truck_id and in_package.assigned_truck_id != truck.truck_id:
-            return False
-    return True
+    @staticmethod
+    def delayed_packages_arrived(in_packages: List[Package], current_time: time):
+        latest_arrival = in_packages[0].location.latest_package_arrival
+        if TimeConversion.is_time_at_or_before_other_time(latest_arrival, current_time):
+            for in_package in in_packages:
+                in_package.status = DeliveryStatus.AT_HUB

@@ -26,6 +26,8 @@ class TestCsvParser(TestCase):
                 if package.special_note.startswith('Can only be on truck ') else not package.assigned_truck_id
             assert datetime.combine(datetime.min, package.location.earliest_deadline) <= \
                    datetime.combine(datetime.min, package.deadline)
+            assert datetime.combine(datetime.min, package.location.latest_package_arrival) >= \
+                   datetime.combine(datetime.min, package.hub_arrival_time)
 
     def test_initialize_locations(self):
         hubs = 0

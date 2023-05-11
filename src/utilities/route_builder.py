@@ -1,3 +1,4 @@
+from datetime import time
 from typing import List, Set
 import re
 
@@ -5,34 +6,50 @@ import re
 
 __all__ = ['RouteBuilder']
 
+from src import config
 from src.constants.delivery_status import DeliveryStatus
 from src.models.location import Location
 from src.models.package import Package
 from src.models.truck import Truck
 from src.utilities.csv_parser import CsvParser
 from src.utilities.custom_hash import CustomHash
+from src.utilities.package_handler import PackageHandler
+from src.utilities.time_conversion import TimeConversion
 
 all_locations = CsvParser.initialize_locations()
 all_packages = CsvParser.initialize_packages(all_locations)
+package_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
+package_hash.add_all_packages(all_packages)
+
 Truck.hub_location = [location for location in all_locations if location.is_hub][0]
 
 
-def _nearest_neighbors(in_location: Location, in_packages: List[Package]):
+def _nearest_neighbors(in_location: Location, in_packages: List[Package], current_time: time):
     sorted_location_dict = sorted(in_location.distance_dict.items(), key=lambda _location: _location[1])
     for location, distance in sorted_location_dict:
         if location.is_hub:
             continue
         if not location.been_routed:
-            if is_location_in_package_set(location, in_packages):
-                out_packages = RouteBuilder.get_location_packages(location, in_packages)
-            else:
-                out_packages = RouteBuilder.get_location_packages(location, all_packages)
-            if not is_deliverable_package_set(list(out_packages)):
-                out_packages.pop().location.been_visited = True
+            out_packages = RouteBuilder.get_location_packages(location, in_packages)
+            if not is_deliverable_package_set(out_packages):
                 continue
-            return out_packages
+            else:
+                return out_packages
     return None
 
+
+def _miles_from_other_location(origin_location: Location, other_location: Location):
+    if origin_location is other_location:
+        return 0
+    return origin_location.distance_dict[other_location]
+
+
+def _time_to_other_location(origin_location: Location, other_location: Location):
+    miles_to_other_location = _miles_from_other_location(origin_location, other_location)
+    return miles_to_other_location / config.DELIVERY_TRUCK_MPH
+
+def _arrival_time_at_next_location(origin_location: Location, next_location: Location):
+    pass
 
 def is_location_in_package_set(in_location: Location, in_packages: List[Package]) -> bool:
     for in_package in in_packages:
@@ -41,9 +58,9 @@ def is_location_in_package_set(in_location: Location, in_packages: List[Package]
     return False
 
 
-def is_deliverable_package_set(in_packages: List[Package]):
+def is_deliverable_package_set(in_packages: Set[Package]):
     for in_package in in_packages:
-        if not in_package.is_verified_address:
+        if not in_package.is_verified_address or in_package.status is not DeliveryStatus.AT_HUB:
             return False
     return True
 
@@ -86,18 +103,29 @@ def _get_special_note_bundles(packages: List[Package], starting_pattern: str):
 class RouteBuilder:
     @staticmethod
     def get_optimized_route(truck: Truck, packages: List[Package] = all_packages):
+        truck.dispatch_time = config.DELIVERY_DISPATCH_TIME
+        PackageHandler.bulk_status_update(truck.dispatch_time, DeliveryStatus.AT_HUB, all_packages)
         current_location = Truck.hub_location
         travel_ledger = dict()
         total_miles = 0.0
-        next_packages = _nearest_neighbors(Truck.hub_location, packages)
+        current_time = truck.dispatch_time
+        next_packages = _nearest_neighbors(Truck.hub_location, packages, current_time)
         while next_packages:
             next_location = list(next_packages)[0].location
-            travel_ledger[total_miles] = (current_location, next_location)
-            total_miles += current_location.distance_dict[next_location]
-            current_location.been_routed = True
+            miles_to_next = current_location.distance_dict[next_location]
+            current_drive_miles = 0.0
+            while current_drive_miles <= miles_to_next:
+                current_time = TimeConversion.convert_miles_to_time(total_miles + current_drive_miles, truck.dispatch_time, pause_seconds=truck._total_paused_seconds(current_time))
+                while truck.is_paused(current_time):
+                    current_time = TimeConversion.increment_time(current_time)
+                current_drive_miles += 0.1
+            total_miles += miles_to_next
+            travel_ledger[total_miles] = (current_time, current_location, next_location)
             current_location = next_location
-            next_packages = _nearest_neighbors(current_location, packages)
-        truck._travel_ledger = travel_ledger
+            current_location.been_routed = True
+            PackageHandler.bulk_status_update(current_time, DeliveryStatus.AT_HUB, list(all_packages))
+            next_packages = _nearest_neighbors(current_location, packages, current_time)
+        truck.set_travel_ledger(travel_ledger)
 
     @staticmethod
     def get_most_spread_out_stops(packages: List[Package]):

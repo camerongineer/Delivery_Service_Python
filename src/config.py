@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import time, datetime
 
 from src.utilities.path_utils import PathUtils
 
@@ -11,6 +11,7 @@ STANDARD_PACKAGE_ARRIVAL_TIME = time(hour=4, minute=00)
 PACKAGE_ARRIVAL_STATUS_UPDATE_TIME = time(hour=6, minute=00)
 DELIVERY_DISPATCH_TIME = time(hour=8, minute=00)
 DELIVERY_RETURN_TIME = time(hour=19, minute=00)
+DELIVERY_DATE = datetime.min
 
 DISTANCE_CSV_FILE = PathUtils.get_full_path_string('distance_table.csv')
 PACKAGE_CSV_FILE = PathUtils.get_full_path_string('package_file.csv')
