@@ -36,7 +36,7 @@ class TestPackageHandler(TestCase):
         required_truck_id = 2
         required_package_ids = [3, 18, 36, 38]
         truck_2_packages = RouteBuilder.get_assigned_truck_packages(self.packages, required_truck_id)
-        PackageHandler.bulk_status_update(config.STANDARD_PACKAGE_ARRIVAL_TIME, DeliveryStatus.AT_HUB, self.packages)
+        PackageHandler.bulk_status_update(config.STANDARD_PACKAGE_ARRIVAL_TIME, self.packages, self.locations)
         assert list(truck_2_packages)[0].status is DeliveryStatus.AT_HUB
         assert not PackageHandler.load_packages(config.STANDARD_PACKAGE_ARRIVAL_TIME, self.truck_1, [truck_2_packages])
         assert not len(self.truck_1)

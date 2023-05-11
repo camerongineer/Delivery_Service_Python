@@ -12,6 +12,8 @@ def _get_project_root() -> str:
 
 
 class PathUtils:
+    """Returns the absolute path of the file"""
+
     @staticmethod
-    def get_full_path_string(filename: str) -> str:
+    def get_full_file_path(filename: str) -> str:
         return os.path.join(_get_project_root(), filename)

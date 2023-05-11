@@ -1,10 +1,7 @@
+import re
 from datetime import time
 from typing import List, Set
-import re
 
-
-
-__all__ = ['RouteBuilder']
 
 from src import config
 from src.constants.delivery_status import DeliveryStatus
@@ -15,6 +12,8 @@ from src.utilities.csv_parser import CsvParser
 from src.utilities.custom_hash import CustomHash
 from src.utilities.package_handler import PackageHandler
 from src.utilities.time_conversion import TimeConversion
+
+__all__ = ['RouteBuilder']
 
 all_locations = CsvParser.initialize_locations()
 all_packages = CsvParser.initialize_packages(all_locations)
@@ -48,8 +47,10 @@ def _time_to_other_location(origin_location: Location, other_location: Location)
     miles_to_other_location = _miles_from_other_location(origin_location, other_location)
     return miles_to_other_location / config.DELIVERY_TRUCK_MPH
 
+
 def _arrival_time_at_next_location(origin_location: Location, next_location: Location):
     pass
+
 
 def is_location_in_package_set(in_location: Location, in_packages: List[Package]) -> bool:
     for in_package in in_packages:
@@ -103,27 +104,30 @@ def _get_special_note_bundles(packages: List[Package], starting_pattern: str):
 class RouteBuilder:
     @staticmethod
     def get_optimized_route(truck: Truck, packages: List[Package] = all_packages):
-        truck.dispatch_time = config.DELIVERY_DISPATCH_TIME
-        PackageHandler.bulk_status_update(truck.dispatch_time, DeliveryStatus.AT_HUB, all_packages)
         current_location = Truck.hub_location
+        truck.dispatch_time = config.DELIVERY_DISPATCH_TIME
+        current_time = truck.dispatch_time
         travel_ledger = dict()
         total_miles = 0.0
-        current_time = truck.dispatch_time
         next_packages = _nearest_neighbors(Truck.hub_location, packages, current_time)
         while next_packages:
             next_location = list(next_packages)[0].location
             miles_to_next = current_location.distance_dict[next_location]
             current_drive_miles = 0.0
             while current_drive_miles <= miles_to_next:
-                current_time = TimeConversion.convert_miles_to_time(total_miles + current_drive_miles, truck.dispatch_time, pause_seconds=truck._total_paused_seconds(current_time))
+                current_time = TimeConversion.convert_miles_to_time(
+                    miles=total_miles + current_drive_miles,
+                    start_time=truck.dispatch_time,
+                    pause_seconds=truck._total_paused_seconds(current_time))
                 while truck.is_paused(current_time):
                     current_time = TimeConversion.increment_time(current_time)
                 current_drive_miles += 0.1
             total_miles += miles_to_next
             travel_ledger[total_miles] = (current_time, current_location, next_location)
+            PackageHandler.is_delivered_on_time(current_time, next_packages)
             current_location = next_location
             current_location.been_routed = True
-            PackageHandler.bulk_status_update(current_time, DeliveryStatus.AT_HUB, list(all_packages))
+            PackageHandler.bulk_status_update(current_time, list(all_packages), all_locations)
             next_packages = _nearest_neighbors(current_location, packages, current_time)
         truck.set_travel_ledger(travel_ledger)
 
@@ -136,10 +140,10 @@ class RouteBuilder:
         return set(RouteBuilder.get_location_package_dict(packages)[location])
 
     @staticmethod
-    def get_all_packages_at_bundled_locations(bundled_packages: List[Package], all_packages: List[Package]):
+    def get_all_packages_at_bundled_locations(bundled_packages: List[Package], in_packages: List[Package]):
         bundled_set = set()
         for package in bundled_packages:
-            all_packages_at_location = RouteBuilder.get_location_packages(package.location, all_packages)
+            all_packages_at_location = RouteBuilder.get_location_packages(package.location, in_packages)
             for bundled_package in all_packages_at_location:
                 bundled_set.add(bundled_package)
         return bundled_set

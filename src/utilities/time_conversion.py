@@ -17,7 +17,8 @@ class TimeConversion:
         return time_difference * miles_per_second
 
     @staticmethod
-    def convert_miles_to_time(miles: float, start_time: time, miles_per_hour=config.DELIVERY_TRUCK_MPH, pause_seconds=0) -> time:
+    def convert_miles_to_time(miles: float, start_time: time, pause_seconds,
+                              miles_per_hour=config.DELIVERY_TRUCK_MPH) -> time:
         if miles <= 0:
             return start_time
         time_seconds = ((miles / miles_per_hour) * 3600) + pause_seconds

@@ -20,8 +20,9 @@ class TestRouteBuilder(TestCase):
 
     def test_get_optimized_route(self):
         truck = Truck(2)
-        truck.pause(time(hour=8, minute=0), time(hour=8, minute=55))
-        truck.pause(time(hour=10, minute=37), time(hour=11, minute=37))
+        # truck.pause(time(hour=8, minute=20), time(hour=8, minute=55))
+        # truck.pause(time(hour=8, minute=1), time(hour=8, minute=30))
+        # truck.pause(time(hour=8, minute=57), time(hour=8, minute=59))
         RouteBuilder.get_optimized_route(truck)
         truck.dispatch_time = config.DELIVERY_DISPATCH_TIME
         # truck.pause(time(hour=9), time(hour=9, minute=30))
@@ -29,6 +30,10 @@ class TestRouteBuilder(TestCase):
 
         for mile, (stop_time, current_location, next_location) in truck._travel_ledger.items():
             print(f'miles={mile:1f}, time={stop_time}, location={next_location.name}, address={next_location.address}')
+            location_packages = RouteBuilder.get_location_packages(next_location, self.packages)
+            for package in location_packages:
+                if package.status_update_dict:
+                    print(package.status_update_dict)
         print(len(truck._travel_ledger))
         print(truck.get_mileage(current_time))
         print(truck.get_current_location(current_time))

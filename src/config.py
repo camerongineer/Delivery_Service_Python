@@ -13,5 +13,8 @@ DELIVERY_DISPATCH_TIME = time(hour=8, minute=00)
 DELIVERY_RETURN_TIME = time(hour=19, minute=00)
 DELIVERY_DATE = datetime.min
 
-DISTANCE_CSV_FILE = PathUtils.get_full_path_string('distance_table.csv')
-PACKAGE_CSV_FILE = PathUtils.get_full_path_string('package_file.csv')
+DISTANCE_CSV_FILE = PathUtils.get_full_file_path('distance_table.csv')
+PACKAGE_CSV_FILE = PathUtils.get_full_file_path('package_file.csv')
+
+PACKAGE_9_ADDRESS_CHANGE_TIME = time(hour=10, minute=20)
+PACKAGE_9_UPDATED_ADDRESS = "410 S State St., Salt Lake City, UT 84111"

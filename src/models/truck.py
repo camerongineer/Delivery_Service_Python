@@ -82,8 +82,22 @@ class Truck(CustomHash):
     def set_travel_ledger(self, travel_ledger: dict):
         self._travel_ledger = travel_ledger
 
-    def pause(self, pause_start: time, pause_end: time):
-        self._pause_ledger[pause_start] = pause_end
+    def pause(self, in_pause_start: time, in_pause_end: time):
+        in_pause_start_datetime = TimeConversion.get_datetime(in_pause_start)
+        in_pause_end_datetime = TimeConversion.get_datetime(in_pause_end)
+        if in_pause_start_datetime >= in_pause_end_datetime:
+            return
+        for pause_start, pause_end in self._pause_ledger.items():
+            pause_start_datetime = TimeConversion.get_datetime(pause_start)
+            pause_end_datetime = TimeConversion.get_datetime(pause_end)
+            if pause_start_datetime <= in_pause_start_datetime <= pause_end_datetime:
+                self._pause_ledger[pause_start] = in_pause_end if in_pause_end_datetime > pause_end_datetime else pause_end
+                return
+            elif in_pause_start_datetime <= pause_start_datetime <= in_pause_end_datetime:
+                self._pause_ledger[in_pause_start] = in_pause_end if in_pause_end_datetime > pause_end_datetime else pause_end
+                del self._pause_ledger[pause_start]
+                return
+        self._pause_ledger[in_pause_start] = in_pause_end
 
     def get_mileage(self, current_time: time):
         time_difference = TimeConversion.get_seconds_between_times(self._dispatch_time, current_time)
