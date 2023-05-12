@@ -20,6 +20,7 @@ class Location:
         self.been_routed = False
         self.earliest_deadline = DELIVERY_RETURN_TIME
         self.latest_package_arrival = None
+        self.has_required_truck_package = False
 
     def set_city(self, city: UtahCity):
         self.city = city

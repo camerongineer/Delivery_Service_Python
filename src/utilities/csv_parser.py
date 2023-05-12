@@ -4,6 +4,7 @@ from datetime import datetime, time
 from typing import List
 
 from src import config
+from src.constants.delivery_status import DeliveryStatus
 from src.constants.utah_cities import UtahCity
 from src.models.location import Location
 from src.models.package import Package
@@ -11,6 +12,8 @@ from src.models.truck import Truck
 
 
 __all__ = ['CsvParser']
+
+from src.utilities.time_conversion import TimeConversion
 
 
 def _set_arrival_time(package: Package):
@@ -24,8 +27,10 @@ def _set_arrival_time(package: Package):
             elif match.group(3) == 'am' and hour == 12:
                 hour = 0
             package.hub_arrival_time = time(hour=hour, minute=minute)
+            package.update_status(DeliveryStatus.ON_ROUTE_TO_DEPOT, config.STANDARD_PACKAGE_ARRIVAL_TIME)
     else:
         package.hub_arrival_time = config.STANDARD_PACKAGE_ARRIVAL_TIME
+        package.update_status(DeliveryStatus.AT_HUB, config.STANDARD_PACKAGE_ARRIVAL_TIME)
 
 
 def _set_assigned_truck(package: Package):
@@ -33,11 +38,12 @@ def _set_assigned_truck(package: Package):
         pattern = r'\d+'
         match = re.findall(pattern, package.special_note).pop()
         package.assigned_truck_id = int(match)
+        package.location.has_required_truck_package = True
 
 
 def _set_earliest_location_deadline(location: Location, in_deadline_time: time):
-    current_location_deadline = datetime.combine(datetime.min, location.earliest_deadline)
-    in_deadline = datetime.combine(datetime.min, in_deadline_time)
+    current_location_deadline = TimeConversion.get_datetime(location.earliest_deadline)
+    in_deadline = TimeConversion.get_datetime(in_deadline_time)
     if in_deadline < current_location_deadline:
         location.earliest_deadline = in_deadline_time
 
@@ -46,8 +52,8 @@ def _set_latest_location_package_arrival(location: Location, in_arrival_time: ti
     if not location.latest_package_arrival:
         location.latest_package_arrival = in_arrival_time
     else:
-        current_latest_location_arrival = datetime.combine(datetime.min, location.latest_package_arrival)
-        in_arrival = datetime.combine(datetime.min, in_arrival_time)
+        current_latest_location_arrival = TimeConversion.get_datetime(location.latest_package_arrival)
+        in_arrival = TimeConversion.get_datetime(in_arrival_time)
         if in_arrival > current_latest_location_arrival:
             location.latest_package_arrival = in_arrival_time
 

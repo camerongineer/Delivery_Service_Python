@@ -29,9 +29,9 @@ class TimeConversion:
         return datetime.combine(config.DELIVERY_DATE, in_time)
 
     @staticmethod
-    def increment_time(in_time: time):
+    def increment_time(in_time: time, time_interval=1):
         in_datetime = TimeConversion.get_datetime(in_time)
-        in_datetime = in_datetime + timedelta(seconds=1)
+        in_datetime = in_datetime + timedelta(seconds=time_interval)
         return in_datetime.time()
 
     @staticmethod
@@ -43,3 +43,12 @@ class TimeConversion:
     @staticmethod
     def is_time_at_or_before_other_time(origin_time: time, other_time: time) -> bool:
         return TimeConversion.get_datetime(origin_time) <= TimeConversion.get_datetime(other_time)
+
+    @staticmethod
+    def get_paused_seconds(truck_pause_ledger: dict, current_time: time):
+        total_paused_seconds = 0
+        for pause_start_time, pause_end_time in truck_pause_ledger.items():
+            if pause_start_time < current_time:
+                time_to_compare = pause_end_time if pause_end_time < current_time else current_time
+                total_paused_seconds += TimeConversion.get_seconds_between_times(pause_start_time, time_to_compare)
+        return total_paused_seconds

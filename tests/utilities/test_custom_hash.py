@@ -1,8 +1,9 @@
 from unittest import TestCase
 
 from src import config
-from src.models import Package
-from src.utilities import CsvParser, CustomHash
+from src.models.package import Package
+from src.utilities.csv_parser import CsvParser
+from src.utilities.custom_hash import CustomHash
 
 
 class TestCustomHash(TestCase):
