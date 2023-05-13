@@ -1,7 +1,7 @@
 import csv
 import re
 from datetime import datetime, time
-from typing import List
+from typing import Set
 
 from src import config
 from src.constants.delivery_status import DeliveryStatus
@@ -104,7 +104,7 @@ class CsvParser:
         return locations
 
     @staticmethod
-    def initialize_packages(locations: List[Location], filepath=config.PACKAGE_CSV_FILE):
+    def initialize_packages(locations: Set[Location], filepath=config.PACKAGE_CSV_FILE):
         packages = []
         with open(filepath, newline='') as csv_file:
             reader = csv.DictReader(csv_file)

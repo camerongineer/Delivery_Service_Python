@@ -11,20 +11,20 @@ from src.models.package import Package
 class CustomHash:
 
     def __init__(self, capacity: int):
-        self.capacity = capacity
-        self.arr: list = [[]] * capacity
+        self._capacity = capacity
+        self._arr: list = [[]] * capacity
         self._size = 0
 
     def __len__(self):
         return self._size
 
     def __contains__(self, package):
-        index = hash(package) % self.capacity
-        return package in self.arr[index]
+        index = hash(package) % self._capacity
+        return package in self._arr[index]
 
     def add_package(self, package: Package):
         if self._locate_package(package_id=package.package_id) == -1:
-            self.arr[package.package_id % self.capacity].append(package)
+            self._arr[package.package_id % self._capacity].append(package)
             self._size += 1
             return True
         return False
@@ -32,15 +32,19 @@ class CustomHash:
     def get_package(self, package_id: int) -> Package:
         index = self._locate_package(package_id)
         if index != -1:
-            return self.arr[package_id % self.capacity][index]
+            return self._arr[package_id % self._capacity][index]
 
     def remove_package(self, package_id: int):
         index = self._locate_package(package_id)
         if index == -1:
             return False
-        del self.arr[package_id % self.capacity][index]
+        del self._arr[package_id % self._capacity][index]
         self._size -= 1
         return True
+
+    def clear(self):
+        self._arr = [[]] * self._capacity
+        self._size = 0
 
     @final
     def add_all_packages(self, packages):
@@ -51,7 +55,7 @@ class CustomHash:
             self.add_package(package)
 
     def _locate_package(self, package_id: int) -> int:
-        for i, package in enumerate(self.arr[package_id % self.capacity]):
+        for i, package in enumerate(self._arr[package_id % self._capacity]):
             if package.package_id == package_id:
                 return i
         return -1

@@ -27,6 +27,12 @@ class Truck(CustomHash):
         self._travel_ledger = dict()
         self._pause_ledger = dict()
 
+    def __str__(self):
+        return f'''
+current time: {self.clock}
+current location: {self.current_location.name}
+remaining capacity: {self._capacity - self._size}'''
+
     @property
     def truck_id(self):
         return self._truck_id
@@ -99,6 +105,12 @@ class Truck(CustomHash):
             pass
             # raise TruckCapacityExceededError
         super().add_package(package)
+
+    def packages(self):
+        return self._arr
+
+    def unload(self):
+        self.clear()
 
     def record(self):
         self._travel_ledger[self.mileage] =\
