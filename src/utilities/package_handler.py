@@ -1,5 +1,5 @@
 import re
-from datetime import time, datetime
+from datetime import time
 from typing import List, Set
 
 __all__ = ['PackageHandler']
@@ -41,13 +41,13 @@ class PackageHandler:
     Truck.hub_location = [location for location in all_locations if location.is_hub][0]
 
     @staticmethod
-    def load_packages(current_time: time, truck: Truck, package_sets: List[Set[Package]]):
+    def load_packages(truck: Truck, package_sets: List[Set[Package]]):
         for package_set in package_sets:
-            if truck.previous_location is not Truck.hub_location or not _is_loadable_package_set(truck, package_set):
+            if truck.current_location is not Truck.hub_location or not _is_loadable_package_set(truck, package_set):
                 return False
         for package_set in package_sets:
             for package in package_set:
-                package.update_status(DeliveryStatus.LOADED, current_time)
+                package.update_status(DeliveryStatus.LOADED, truck.clock)
                 truck.add_package(package)
             return True
 
@@ -66,7 +66,7 @@ class PackageHandler:
         return False
 
     @staticmethod
-    def bulk_status_update(current_time: time, packages: List[Package]):
+    def bulk_status_update(current_time: time, packages=all_packages):
         for package in packages:
             if _is_package_arriving_at_hub(package, current_time):
                 package.update_status(DeliveryStatus.AT_HUB, current_time)
@@ -85,7 +85,7 @@ class PackageHandler:
     #             in_package.status = DeliveryStatus.AT_HUB
 
     @staticmethod
-    def get_location_package_dict(packages: List[Package]):
+    def get_location_package_dict(packages=all_packages):
         location_package_dict = dict()
         for package in packages:
             if package.location not in location_package_dict:
@@ -94,13 +94,13 @@ class PackageHandler:
         return location_package_dict
 
     @staticmethod
-    def get_location_packages(location: Location, packages: List[Package]):
+    def get_location_packages(location: Location, packages=all_packages):
         if location not in PackageHandler.get_location_package_dict(packages).keys():
             return None
         return set(PackageHandler.get_location_package_dict(packages)[location])
 
     @staticmethod
-    def get_all_packages_at_bundled_locations(bundled_packages: List[Package], in_packages: List[Package]):
+    def get_all_packages_at_bundled_locations(bundled_packages: List[Package], in_packages=all_packages):
         bundled_set = set()
         for package in bundled_packages:
             all_packages_at_location = PackageHandler.get_location_packages(package.location, in_packages)
@@ -116,7 +116,7 @@ class PackageHandler:
 
     @staticmethod
     def get_bundled_package_ids(packages: List[Package]):
-        return PackageHandler.get_special_note_bundles(packages, 'Must be delivered with ')
+        return PackageHandler.get_special_note_bundles('Must be delivered with ', packages)
 
     @staticmethod
     def unionize_bundled_sets(bundled_sets):
@@ -132,7 +132,7 @@ class PackageHandler:
             i += 1
 
     @staticmethod
-    def get_special_note_bundles(packages: List[Package], starting_pattern: str):
+    def get_special_note_bundles(starting_pattern: str, packages=all_packages):
         bundle_map = {}
         for package in packages:
             if str(package.special_note).startswith(starting_pattern):
@@ -143,9 +143,8 @@ class PackageHandler:
         return bundle_map
 
     @staticmethod
-    def get_bundled_packages(packages: List[Package]) -> List[Set[Package]]:
-        from src.config import NUM_TRUCK_CAPACITY
-        custom_hash = CustomHash(NUM_TRUCK_CAPACITY)
+    def get_bundled_packages(packages=all_packages) -> List[Set[Package]]:
+        custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
         custom_hash.add_all_packages(packages)
         bundle_map = PackageHandler.get_bundled_package_ids(packages)
         package_bundle_sets = []
@@ -159,17 +158,16 @@ class PackageHandler:
         return package_bundle_sets
 
     @staticmethod
-    def get_delayed_packages(packages: List[Package]) -> Set[Package]:
-        from src.config import DELIVERY_DISPATCH_TIME
+    def get_delayed_packages(packages=all_packages) -> Set[Package]:
         delayed_packages = set()
         for package in packages:
-            if package.hub_arrival_time > DELIVERY_DISPATCH_TIME:
+            if package.hub_arrival_time > config.DELIVERY_DISPATCH_TIME:
                 delayed_packages.add(package)
         return delayed_packages
 
     @staticmethod
-    def get_assigned_truck_packages(packages: List[Package], truck_id: int):
-        truck_map = PackageHandler.get_special_note_bundles(packages, 'Can only be on truck ')
+    def get_assigned_truck_packages(truck_id: int, packages=all_packages):
+        truck_map = PackageHandler.get_special_note_bundles('Can only be on truck ', packages)
         truck_packages = set()
         for package in packages:
             if package.package_id in truck_map.keys():

@@ -1,6 +1,7 @@
 from datetime import time
 from unittest import TestCase
 
+from src import config
 from src.utilities.time_conversion import TimeConversion
 
 
@@ -8,15 +9,29 @@ class TestTimeConversion(TestCase):
     def test_convert_time_difference_to_miles(self):
         start_time = time(hour=8)
         end_time = time(hour=9)
-        assert TimeConversion.convert_time_difference_to_miles(start_time, end_time) == 18.0
+        assert TimeConversion.convert_time_difference_to_miles(start_time, end_time) == config.DELIVERY_TRUCK_MPH
         assert TimeConversion.convert_time_difference_to_miles(end_time, start_time) == 0.0
-        assert TimeConversion.convert_time_difference_to_miles(start_time, end_time) != 18.1
+        end_time = time(hour=10)
+        assert TimeConversion.convert_time_difference_to_miles(start_time, end_time) == config.DELIVERY_TRUCK_MPH * 2
 
     def test_convert_miles_to_time(self):
-        miles = 18.0
+        miles = config.DELIVERY_TRUCK_MPH
         start_time = time(hour=8)
         assert TimeConversion.convert_miles_to_time(miles, start_time, 0) == time(hour=9)
         assert TimeConversion.convert_miles_to_time(miles, start_time, 0) != time(hour=9, minute=1)
-        miles = 36.0
+        miles = config.DELIVERY_TRUCK_MPH * 2
         assert TimeConversion.convert_miles_to_time(miles, start_time, 0) != time(hour=9)
         assert TimeConversion.convert_miles_to_time(miles, start_time, 0) == time(hour=10)
+
+    def test_get_paused_seconds(self):
+        pause_ledger = dict()
+        current_time = time(hour=10)
+        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 0
+        pause_ledger[time(hour=9)] = time(hour=9, minute=30)
+        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 30
+        pause_ledger[time(hour=10)] = time(hour=10, minute=30)
+        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 30
+        current_time = time(hour=10, minute=15)
+        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 45
+        current_time = time(hour=10, minute=30)
+        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 60

@@ -4,16 +4,14 @@ from unittest import TestCase
 from src import config
 from src.constants.delivery_status import DeliveryStatus
 from src.models.truck import Truck
-from src.utilities.csv_parser import CsvParser
 from src.utilities.custom_hash import CustomHash
 from src.utilities.package_handler import PackageHandler
-from src.utilities.route_builder import RouteBuilder
 
 
 class TestPackageHandler(TestCase):
     def setUp(self) -> None:
-        self.locations = CsvParser.initialize_locations()
-        self.packages = CsvParser.initialize_packages(self.locations)
+        self.locations = PackageHandler.all_locations
+        self.packages = PackageHandler.all_packages
         self.custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
         self.custom_hash.add_all_packages(self.packages)
         self.truck_1 = Truck(1)
@@ -24,24 +22,31 @@ class TestPackageHandler(TestCase):
         pass
 
     def test_load_packages_at_hub(self):
-        self.truck_1.location = None
-        assert not PackageHandler.load_packages(config.STANDARD_PACKAGE_ARRIVAL_TIME, self.truck_1, [self.packages[0]])
+        self.truck_1.current_location = None
+        self.truck_1.set_clock(config.STANDARD_PACKAGE_ARRIVAL_TIME)
+        assert not PackageHandler.load_packages(self.truck_1, [self.packages[0]])
         assert not len(self.truck_1)
-        self.truck_1.location = Truck.hub_location
-        assert PackageHandler.load_packages(config.STANDARD_PACKAGE_ARRIVAL_TIME, self.truck_1, [{self.packages[0]}])
+        self.truck_1.current_location = Truck.hub_location
+        assert self.packages[0].status == DeliveryStatus.AT_HUB
+        assert PackageHandler.load_packages(self.truck_1, [{self.packages[0]}])
         assert len(self.truck_1) == 1
         assert self.packages[0] in self.truck_1
+        assert self.packages[0] is self.truck_1.get_package(self.packages[0].package_id)
+        assert self.packages[0].status == DeliveryStatus.LOADED
+        assert self.packages[0].status_update_dict[self.truck_1.clock] == DeliveryStatus.LOADED
 
     def test_load_packages_for_assigned_truck(self):
+        self.truck_1.set_clock(config.STANDARD_PACKAGE_ARRIVAL_TIME)
+        self.truck_2.set_clock(config.STANDARD_PACKAGE_ARRIVAL_TIME)
         required_truck_id = 2
         required_package_ids = [3, 18, 36, 38]
-        truck_2_packages = PackageHandler.get_assigned_truck_packages(self.packages, required_truck_id)
-        PackageHandler.bulk_status_update(config.STANDARD_PACKAGE_ARRIVAL_TIME, self.packages, self.locations)
+        truck_2_packages = PackageHandler.get_assigned_truck_packages(required_truck_id)
+        PackageHandler.bulk_status_update(config.STANDARD_PACKAGE_ARRIVAL_TIME)
         assert list(truck_2_packages)[0].status is DeliveryStatus.AT_HUB
-        assert not PackageHandler.load_packages(config.STANDARD_PACKAGE_ARRIVAL_TIME, self.truck_1, [truck_2_packages])
+        assert not PackageHandler.load_packages(self.truck_1, [truck_2_packages])
         assert not len(self.truck_1)
         assert list(truck_2_packages)[0].status is DeliveryStatus.AT_HUB
-        assert PackageHandler.load_packages(config.STANDARD_PACKAGE_ARRIVAL_TIME, self.truck_2, [truck_2_packages])
+        assert PackageHandler.load_packages(self.truck_2, [truck_2_packages])
         assert len(self.truck_2) == len(required_package_ids)
         for package in truck_2_packages:
             assert self.truck_2.get_package(package.package_id) is package
@@ -72,23 +77,23 @@ class TestPackageHandler(TestCase):
         new_location = package_to_update.location
         assert len(PackageHandler.get_location_package_dict(self.packages)[new_location]) == 4
 
-    def test_bulk_status_update(self):
-        current_time = time(hour=7)
+    # def test_bulk_status_update(self):
+    #     current_time = time(hour=7)
 
-    def test_get_mileage(self):
-        self.truck_1.dispatch_time = config.DELIVERY_DISPATCH_TIME
-        self.truck_1.completion_time = time(hour=10, minute=37, second=5)
-        self.truck_1.pause(time(hour=10, minute=30), time(hour=10, minute=33))
-        current_time = time(hour=17, minute=31)
-        print(self.truck_1.get_mileage(current_time))
+    # def test_get_mileage(self):
+    #     self.truck_1.dispatch_time = config.DELIVERY_DISPATCH_TIME
+    #     self.truck_1.completion_time = time(hour=10, minute=37, second=5)
+    #     self.truck_1.pause(time(hour=10, minute=30), time(hour=10, minute=33))
+    #     current_time = time(hour=17, minute=31)
+    #     print(self.truck_1.get_mileage(current_time))
 
     def test_get_location_packages(self):
         sole_package_at_location = self.custom_hash.get_package(22)
-        one_package = PackageHandler.get_location_packages(sole_package_at_location.location, self.packages)
+        one_package = PackageHandler.get_location_packages(sole_package_at_location.location)
         assert len(one_package) == 1
         assert one_package.pop() is sole_package_at_location
         one_package_of_many_at_location = self.custom_hash.get_package(8)
-        many_packages = PackageHandler.get_location_packages(one_package_of_many_at_location.location, self.packages)
+        many_packages = PackageHandler.get_location_packages(one_package_of_many_at_location.location)
         assert len(many_packages) == 3
         assert one_package_of_many_at_location in many_packages
         for package in many_packages:
@@ -98,12 +103,12 @@ class TestPackageHandler(TestCase):
                 assert one_package_of_many_at_location is not package
 
     def test_get_location_package_dict(self):
-        location_package_dict = PackageHandler.get_location_package_dict(self.packages)
+        location_package_dict = PackageHandler.get_location_package_dict()
         assert len(location_package_dict.keys()) == len(self.locations) - 1
         assert sum(len(package_list) for package_list in location_package_dict.values()) == len(self.packages)
 
     def test_get_bundled_packages(self):
-        package_bundles = PackageHandler.get_bundled_packages(self.packages)
+        package_bundles = PackageHandler.get_bundled_packages()
         assert len(package_bundles) == 1
         bundle = package_bundles.pop()
         assert not package_bundles
@@ -113,9 +118,9 @@ class TestPackageHandler(TestCase):
             assert package.package_id in bundled_package_ids
 
     def test_get_all_packages_at_bundled_locations(self):
-        package_bundle = PackageHandler.get_bundled_packages(self.packages).pop()
+        package_bundle = PackageHandler.get_bundled_packages().pop()
         all_packages_at_bundle_locations =\
-            PackageHandler.get_all_packages_at_bundled_locations(list(package_bundle), self.packages)
+            PackageHandler.get_all_packages_at_bundled_locations(list(package_bundle))
         required_bundled_package_ids = [13, 14, 15, 16, 19, 20, 21, 34, 39]
         assert len(all_packages_at_bundle_locations) == len(required_bundled_package_ids)
         for package_id in required_bundled_package_ids:
@@ -124,7 +129,7 @@ class TestPackageHandler(TestCase):
     def test_get_assigned_truck_packages(self):
         required_truck_id = 2
         required_package_ids = [3, 18, 36, 38]
-        truck_packages = PackageHandler.get_assigned_truck_packages(self.packages, required_truck_id)
+        truck_packages = PackageHandler.get_assigned_truck_packages(required_truck_id)
         assert len(truck_packages) == len(required_package_ids)
         for package_id in required_package_ids:
             assert self.custom_hash.get_package(package_id) in truck_packages
@@ -137,7 +142,7 @@ class TestPackageHandler(TestCase):
                 assert not package.assigned_truck_id
 
     def test_get_all_packages_at_assigned_truck_locations(self):
-        assigned_truck_bundle = PackageHandler.get_assigned_truck_packages(self.packages, truck_id=2)
+        assigned_truck_bundle = PackageHandler.get_assigned_truck_packages(truck_id=2)
         all_packages_at_location_assigned_to_truck =\
             PackageHandler.get_all_packages_at_bundled_locations(assigned_truck_bundle, self.packages)
         required_assigned_truck_package_ids = [3, 5, 18, 36, 37, 38]
@@ -157,9 +162,9 @@ class TestPackageHandler(TestCase):
             assert self.custom_hash.get_package(package_id).hub_arrival_time == time(hour=9, minute=5)
 
     def test_get_all_packages_at_delayed_package_locations(self):
-        delayed_truck_packages = PackageHandler.get_delayed_packages(self.packages)
+        delayed_truck_packages = PackageHandler.get_delayed_packages()
         all_packages_at_delayed_package_locations =\
-            PackageHandler.get_all_packages_at_bundled_locations(list(delayed_truck_packages), self.packages)
+            PackageHandler.get_all_packages_at_bundled_locations(list(delayed_truck_packages))
         required_delayed_location_package_ids = [6, 25, 26, 28, 31, 32]
         assert len(all_packages_at_delayed_package_locations) == len(required_delayed_location_package_ids)
         for package_id in required_delayed_location_package_ids:

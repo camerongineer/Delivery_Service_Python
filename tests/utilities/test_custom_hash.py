@@ -2,15 +2,15 @@ from unittest import TestCase
 
 from src import config
 from src.models.package import Package
-from src.utilities.csv_parser import CsvParser
 from src.utilities.custom_hash import CustomHash
+from src.utilities.package_handler import PackageHandler
 
 
 class TestCustomHash(TestCase):
 
     def setUp(self) -> None:
-        self.locations = CsvParser.initialize_locations()
-        self.packages = CsvParser.initialize_packages(self.locations)
+        self.locations = PackageHandler.all_locations
+        self.packages = PackageHandler.all_packages
         self.custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
 
     def test_add_package(self):

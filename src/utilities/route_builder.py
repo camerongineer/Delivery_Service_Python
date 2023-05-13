@@ -20,7 +20,7 @@ def _nearest_neighbors(truck: Truck, in_packages: List[Package]):
             continue
         if not location.been_routed:
             out_packages = PackageHandler.get_location_packages(location, in_packages)
-            if not _is_deliverable_package_set(out_packages): #or _in_close_range_of_undeliverable(undeliverable_locations, location):
+            if not _is_deliverable_package_set(out_packages) or _in_close_proximity_of_undeliverable(truck, location):
                 continue
             else:
                 return out_packages
@@ -62,42 +62,34 @@ def _is_loadable_package_set(in_packages: List[Package]):
 def get_undeliverable_locations(truck: Truck):
     undeliverable_locations = set()
     for package in PackageHandler.all_packages:
-        if not package.is_verified_address or package.status != DeliveryStatus.AT_HUB:
+        if not package.is_verified_address or package.status != DeliveryStatus.AT_HUB or (package.assigned_truck_id and package.assigned_truck_id != truck.truck_id):
             undeliverable_locations.add(package.location)
     return undeliverable_locations
 
 
-# def _in_close_range_of_undeliverable(truck: Truck, in_location: Location):
-#     undeliverable_locations = get_undeliverable_locations(truck)
-#     for location in undeliverable_locations:
-#         if location is in_location or location.distance_dict[in_location] < 1.75:
-#             return True
-#     return False
+def _in_close_proximity_of_undeliverable(truck: Truck, in_location: Location):
+    undeliverable_locations = get_undeliverable_locations(truck)
+    for location in undeliverable_locations:
+        if location is in_location or location.distance_dict[in_location] < 1:
+            return True
+    return False
 
-def _travel_to_next_location(truck: Truck, travel_ledger: dict, total_miles: float):
-    pass
+
+def _travel_to_next_location(truck: Truck):
+    _increment_drive_miles(truck)
+    truck.previous_location = truck.current_location
+    truck.current_location = truck.next_location
+    truck.next_location = None
 
 
 def _return_to_hub(truck: Truck, pause_end_at_hub=None):
     truck.next_location = truck.hub_location
-    _increment_drive_miles(truck)
     truck.record()
+    _increment_drive_miles(truck)
     if pause_end_at_hub:
         truck.pause(truck.clock, pause_end_at_hub)
     truck.previous_location = truck.current_location
     truck.current_location = truck.hub_location
-
-
-
-def _resume_from_hub(truck: Truck, travel_ledger: dict, total_miles: float):
-    current_time, previous_location, current_location, next_location = travel_ledger[total_miles]
-    total_miles, current_time = _increment_drive_miles(truck, total_miles, Truck.hub_location, next_location, current_time)
-    travel_ledger[total_miles] = (current_time, previous_location, current_location, Truck.hub_location)
-    time_of_return = TimeConversion.convert_miles_to_time(total_miles, truck.dispatch_time,
-                                                          TimeConversion.get_paused_seconds(truck.pause_ledger,
-                                                                                            current_time))
-    travel_ledger[total_miles] = (time_of_return, current_location, Truck.hub_location, next_location)
-    return total_miles, time_of_return
 
 
 def _increment_drive_miles(truck: Truck):
@@ -113,28 +105,34 @@ def _increment_drive_miles(truck: Truck):
         truck.drive()
 
 
+def _short_detour_to_hub(truck: Truck):
+    if truck.current_location.is_hub:
+        return False
+    return (truck.distance(to_hub=True) + truck.distance(origin_location=truck.hub_location)) <= (truck.distance() * 1.5)
+
 class RouteBuilder:
     @staticmethod
-    def get_optimized_route(truck: Truck, packages: List[Package] = PackageHandler.all_packages):
-        truck.current_location = truck.hub_location
-        truck.set_clock(config.DELIVERY_DISPATCH_TIME)
+    def get_optimized_route(truck: Truck, packages: List[Package] = PackageHandler.all_packages, route_start_time=config.DELIVERY_DISPATCH_TIME):
+        truck.set_clock(route_start_time)
         next_packages = _nearest_neighbors(truck, packages)
+        package_count = 0
+        total_packages = len(packages)
         while next_packages:
             if PackageHandler.get_location_packages(truck.current_location, packages):
                 print(len(PackageHandler.get_location_packages(truck.current_location, packages)), ' Packages Delivered')
             truck.current_location.been_routed = True
+            package_count += len(next_packages)
+            total_packages -= len(next_packages)
             truck.next_location = list(next_packages)[0].location
-            truck.record()
-            if truck.current_location.earliest_deadline == time(hour=9):
-                _return_to_hub(truck, time(hour=9, minute=5))
+            if package_count > config.NUM_TRUCK_CAPACITY or truck.current_location.earliest_deadline == time(hour=9) or (_short_detour_to_hub(truck) and package_count > 6):
+                _return_to_hub(truck)
+                package_count = 0
+                print('Reloading')
+                PackageHandler.bulk_status_update(truck.clock, packages)
                 next_packages = _nearest_neighbors(truck, packages)
                 continue
-            _increment_drive_miles(truck)
-            PackageHandler.is_delivered_on_time(truck.clock, next_packages)
-            truck.previous_location = truck.current_location
-            truck.current_location = truck.next_location
-            if truck.current_location.distance_dict[Truck.hub_location] < 4 and not truck.current_location.has_required_truck_package:
-                print('Close', truck.current_location, truck.current_location.distance_dict[Truck.hub_location])
+            truck.record()
+            _travel_to_next_location(truck)
             PackageHandler.bulk_status_update(truck.clock, packages)
             next_packages = _nearest_neighbors(truck, packages)
         truck.completion_time = truck.clock

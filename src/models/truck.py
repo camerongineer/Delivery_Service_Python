@@ -22,7 +22,7 @@ class Truck(CustomHash):
         self._dispatch_time = None
         self._completion_time = None
         self._previous_location = None
-        self._current_location = None
+        self._current_location = Truck.hub_location
         self._next_location = None
         self._travel_ledger = dict()
         self._pause_ledger = dict()
@@ -97,7 +97,7 @@ class Truck(CustomHash):
     def add_package(self, package: Package):
         if self._size >= config.NUM_TRUCK_CAPACITY:
             pass
-            #print('Truck is at maximum capacity')
+            # raise TruckCapacityExceededError
         super().add_package(package)
 
     def record(self):
@@ -157,3 +157,14 @@ class Truck(CustomHash):
 
     def set_clock(self, start_time: time):
         self._clock = start_time
+
+    def distance(self, origin_location=None, target_location=None, to_hub=False):
+        if not origin_location:
+            origin_location = self.current_location
+        if not target_location:
+            target_location = self.next_location
+        if to_hub:
+            target_location = self.hub_location
+        if origin_location and target_location and (origin_location is not target_location):
+            return origin_location.distance_dict[target_location]
+        return 0

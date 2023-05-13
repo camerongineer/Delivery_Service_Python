@@ -1,11 +1,13 @@
 from datetime import time, datetime
 from unittest import TestCase
 
+from src import config
 from src.constants.delivery_status import DeliveryStatus
 from src.constants.states import State
 from src.constants.utah_cities import UtahCity
 from src.models.location import Location
 from src.utilities.csv_parser import CsvParser
+from src.utilities.time_conversion import TimeConversion
 
 
 class TestCsvParser(TestCase):
@@ -21,20 +23,24 @@ class TestCsvParser(TestCase):
             assert package.location.city.state and isinstance(package.location.city.state, State)
             assert package.deadline and isinstance(package.deadline, time)
             assert package.weight and isinstance(package.weight, int)
-            assert package.status is DeliveryStatus.ON_ROUTE_TO_DEPOT
+            assert package.status is DeliveryStatus.ON_ROUTE_TO_DEPOT if\
+                   package.special_note.startswith('Delayed') else DeliveryStatus.AT_HUB
+            if package.special_note.startswith('Delayed'):
+                assert package.hub_arrival_time != config.STANDARD_PACKAGE_ARRIVAL_TIME
+            else:
+                assert package.hub_arrival_time == config.STANDARD_PACKAGE_ARRIVAL_TIME
             assert package.assigned_truck_id \
                 if package.special_note.startswith('Can only be on truck ') else not package.assigned_truck_id
-            assert datetime.combine(datetime.min, package.location.earliest_deadline) <= \
-                   datetime.combine(datetime.min, package.deadline)
-            assert datetime.combine(datetime.min, package.location.latest_package_arrival) >= \
-                   datetime.combine(datetime.min, package.hub_arrival_time)
+            assert TimeConversion.get_datetime(package.location.earliest_deadline) <= \
+                   TimeConversion.get_datetime(package.deadline)
+            assert TimeConversion.get_datetime(package.location.latest_package_arrival) >= \
+                   TimeConversion.get_datetime(package.hub_arrival_time)
 
     def test_initialize_locations(self):
         hubs = 0
         for location in self.locations:
             if location.is_hub:
                 hubs += 1
-                assert hubs == 1
             assert location.name and isinstance(location.name, str)
             assert location.address and isinstance(location.address, str)
             assert location.zip_code and isinstance(location.zip_code, int)
@@ -42,6 +48,7 @@ class TestCsvParser(TestCase):
             for dist_location, distance in location.distance_dict.items():
                 assert dist_location and isinstance(dist_location, Location)
                 assert distance and isinstance(distance, float)
+        assert hubs == 1
 
     def test_all_other_locations_in_location_dict(self):
         for location in self.locations:
