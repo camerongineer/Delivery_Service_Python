@@ -72,7 +72,8 @@ class PackageHandler:
                 package.update_status(DeliveryStatus.AT_HUB, current_time)
             if _is_package_address_updating(package, current_time):
                 old_location = package.location.address
-                PackageHandler.update_delivery_location(PackageHandler.all_locations, package, config.PACKAGE_9_UPDATED_ADDRESS)
+                PackageHandler.update_delivery_location(PackageHandler.all_locations, package,
+                                                        config.PACKAGE_9_UPDATED_ADDRESS)
                 new_location = package.location.address
                 print(
                     f'Package: {package.package_id:02} address changed from "{old_location}" to "{new_location} at {current_time}"')
@@ -85,28 +86,28 @@ class PackageHandler:
     #             in_package.status = DeliveryStatus.AT_HUB
 
     @staticmethod
-    def get_location_package_dict(packages=all_packages):
+    def get_location_package_dict(in_packages=all_packages):
         location_package_dict = dict()
-        for package in packages:
+        for package in in_packages:
             if package.location not in location_package_dict:
-                location_package_dict[package.location] = []
-            location_package_dict[package.location].append(package)
+                location_package_dict[package.location] = set()
+            location_package_dict[package.location].add(package)
         return location_package_dict
 
     @staticmethod
-    def get_location_packages(location: Location, packages=all_packages):
-        if location not in PackageHandler.get_location_package_dict(packages).keys():
+    def get_location_packages(location: Location, in_packages=all_packages):
+        if location not in PackageHandler.get_location_package_dict(in_packages).keys():
             return None
-        return set(PackageHandler.get_location_package_dict(packages)[location])
+        return PackageHandler.get_location_package_dict(in_packages)[location]
 
     @staticmethod
-    def get_all_packages_at_bundled_locations(bundled_packages: List[Package], in_packages=all_packages):
-        bundled_set = set()
+    def get_all_packages_at_bundled_locations(bundled_packages, in_packages=all_packages):
+        bundled_set_dict = dict()
         for package in bundled_packages:
-            all_packages_at_location = PackageHandler.get_location_packages(package.location, in_packages)
-            for bundled_package in all_packages_at_location:
-                bundled_set.add(bundled_package)
-        return bundled_set
+            if package.location not in bundled_set_dict.keys():
+                all_packages_at_location = PackageHandler.get_location_packages(package.location, in_packages)
+                bundled_set_dict[package.location] = all_packages_at_location
+        return bundled_set_dict
 
     @staticmethod
     def is_delivered_on_time(current_time: time, packages: Set[Package]):
@@ -180,5 +181,3 @@ class PackageHandler:
         for package in original_packages_set:
             if package in packages_to_remove:
                 original_packages_set.remove(package)
-
-
