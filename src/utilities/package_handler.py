@@ -160,12 +160,24 @@ class PackageHandler:
         return package_bundle_sets
 
     @staticmethod
-    def get_delayed_packages(packages=all_packages) -> Set[Package]:
+    def get_delayed_packages(packages=all_packages, ignore_arrived=False) -> Set[Package]:
         delayed_packages = set()
         for package in packages:
-            if package.hub_arrival_time > config.DELIVERY_DISPATCH_TIME:
+            if (TimeConversion.get_datetime(package.hub_arrival_time) >
+                    TimeConversion.get_datetime(config.DELIVERY_DISPATCH_TIME)):
+                if ignore_arrived and package.status == DeliveryStatus.AT_HUB:
+                    continue
                 delayed_packages.add(package)
         return delayed_packages
+
+    @staticmethod
+    def get_deadline_packages(packages=all_packages, deadline_cutoff=config.DELIVERY_RETURN_TIME, ignore_routed=False):
+        deadline_packages = set()
+        for package in packages:
+            if TimeConversion.get_datetime(package.deadline) < TimeConversion.get_datetime(deadline_cutoff):
+                if not package.location.been_routed or ignore_routed:
+                    deadline_packages.add(package)
+        return deadline_packages
 
     @staticmethod
     def get_assigned_truck_packages(truck_id: int, packages=all_packages):

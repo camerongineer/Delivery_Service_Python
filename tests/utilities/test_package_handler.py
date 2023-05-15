@@ -151,6 +151,7 @@ class TestPackageHandler(TestCase):
             assert self.custom_hash.get_package(package_id) in all_packages_at_location_assigned_to_truck
 
     def test_get_delayed_packages(self):
+        PackageHandler.bulk_status_update(config.STANDARD_PACKAGE_ARRIVAL_TIME)
         delayed_packages = PackageHandler.get_delayed_packages(self.packages)
         delayed_package_ids = [6, 25, 28, 32]
         assert len(delayed_packages) == len(delayed_package_ids)
@@ -160,6 +161,36 @@ class TestPackageHandler(TestCase):
                 assert package.hub_arrival_time is config.STANDARD_PACKAGE_ARRIVAL_TIME
         for package_id in delayed_package_ids:
             assert self.custom_hash.get_package(package_id).hub_arrival_time == time(hour=9, minute=5)
+        arrived_package = self.custom_hash.get_package(6)
+        arrived_package.status = DeliveryStatus.AT_HUB
+        delayed_packages = PackageHandler.get_delayed_packages(self.packages, ignore_arrived=True)
+        assert len(delayed_packages) == len(delayed_package_ids) - 1
+
+    def test_get_deadline_packages(self):
+        deadline_packages = PackageHandler.get_deadline_packages(self.packages)
+        deadline_package_ids = [1, 6, 13, 14, 15, 16, 20, 25, 29, 30, 31, 34, 37, 40]
+        assert len(deadline_packages) == len(deadline_package_ids)
+        for package in self.packages:
+            if package not in deadline_packages:
+                assert package.deadline == config.DELIVERY_RETURN_TIME
+            else:
+                assert package.deadline != config.DELIVERY_RETURN_TIME
+        for package_id in deadline_package_ids:
+            if package_id == 15:
+                assert self.custom_hash.get_package(package_id).deadline == time(hour=9, minute=0)
+            else:
+                assert self.custom_hash.get_package(package_id).deadline == time(hour=10, minute=30)
+        deadline_packages = PackageHandler.get_deadline_packages(self.packages, time(hour=10, minute=31))
+        assert len(deadline_packages) == len(deadline_package_ids)
+        deadline_packages = PackageHandler.get_deadline_packages(self.packages, time(hour=10, minute=30))
+        assert len(deadline_packages) == 1
+        deadline_packages = PackageHandler.get_deadline_packages(self.packages, time(hour=9, minute=1))
+        nine_am_deadline_package = deadline_packages.pop()
+        assert nine_am_deadline_package.package_id == 15
+        assert not deadline_packages
+        nine_am_deadline_package.location.been_routed = True
+        assert not PackageHandler.get_deadline_packages(self.packages, time(hour=9, minute=1))
+        assert PackageHandler.get_deadline_packages(self.packages, time(hour=9, minute=1), ignore_routed=True)
 
     def test_get_all_packages_at_delayed_package_locations(self):
         delayed_truck_packages = PackageHandler.get_delayed_packages()

@@ -1,5 +1,3 @@
-
-
 __all__ = ['Location']
 
 from datetime import time

@@ -39,21 +39,28 @@ def _better_solution(nearest: Location, truck: Truck, in_location_package_dict: 
                 break
     if not closest_to_nearest:
         return
-    sum_of_nearest_close_deadlines = len([location for location in [nearest, closest_to_nearest] if location.has_close_deadline(truck.clock, time_delta=3600)])
+    time_delta = 3600
+    sum_of_nearest_close_deadlines = len([location for location in [nearest, closest_to_nearest] if
+                                          location.has_close_deadline(truck.clock, time_delta=time_delta)])
     better_solutions = dict()
     for first_location, other_distance in sorted_location_dict:
-        if first_location.is_hub or first_location.been_routed or nearest is first_location or _in_close_proximity_of_undeliverable(truck, first_location):
+        if first_location.is_hub or first_location.been_routed or nearest is first_location or _in_close_proximity_of_undeliverable(
+                truck, first_location):
             continue
         for second_location, second_distance in sorted_location_dict:
-            if second_location.is_hub or second_location.been_routed or nearest is second_location or first_location is second_location or _in_close_proximity_of_undeliverable(truck, second_location):
+            if second_location.is_hub or second_location.been_routed or nearest is second_location or first_location is second_location or _in_close_proximity_of_undeliverable(
+                    truck, second_location):
                 continue
-            total_distance = truck.current_location.distance_dict[first_location] + first_location.distance_dict[second_location]
-            total_mileage_from_nearest = truck.current_location.distance_dict[nearest] + nearest.distance_dict[closest_to_nearest]
+            total_distance = truck.current_location.distance_dict[first_location] + first_location.distance_dict[
+                second_location]
+            total_mileage_from_nearest = truck.current_location.distance_dict[nearest] + nearest.distance_dict[
+                closest_to_nearest]
             first_packages = in_location_package_dict[first_location]
             second_packages = in_location_package_dict[second_location]
             estimated_package_total = len(first_packages) + len(second_packages) + len(truck)
             sum_of_better_solution_close_deadlines = len([location for location in [first_location, second_location] if
-                                                  location.has_close_deadline(truck.clock, time_delta=1200)])
+                                                          location.has_close_deadline(truck.clock,
+                                                                                      time_delta=time_delta)])
             if estimated_package_total > config.NUM_TRUCK_CAPACITY or sum_of_better_solution_close_deadlines < sum_of_nearest_close_deadlines:
                 print('Heading to close_deadline')
                 return
@@ -64,7 +71,8 @@ def _better_solution(nearest: Location, truck: Truck, in_location_package_dict: 
 
                 if _is_deliverable_package_set(first_packages) and _is_deliverable_package_set(second_packages):
                     better_solutions[total_distance] = (first_packages, second_packages)
-                    print(f'{truck.current_location.name} to {nearest.name} is {total_mileage_from_nearest} then from {nearest.name} to {closest_to_nearest.name} is {nearest.distance_dict[closest_to_nearest]} totaling {total_mileage_from_nearest}')
+                    print(
+                        f'{truck.current_location.name} to {nearest.name} is {total_mileage_from_nearest} then from {nearest.name} to {closest_to_nearest.name} is {nearest.distance_dict[closest_to_nearest]} totaling {total_mileage_from_nearest}')
                     print(
                         f'{truck.current_location.name} to {first_location.name} is {truck.current_location.distance_dict[first_location]} then from {first_location.name} to {second_location.name} is {second_location.distance_dict[first_location]} totaling {total_distance}\n\n')
                     print(sum_of_nearest_close_deadlines, sum_of_better_solution_close_deadlines)
@@ -148,6 +156,11 @@ def _in_close_proximity_of_undeliverable(truck: Truck, in_location: Location) ->
     return False
 
 
+def _in_close_proximity_to_dispatched_partner(truck: Truck):
+    return truck.partner.is_dispatched and not truck.partner.current_location.is_hub and \
+        truck.partner.distance(to_hub=True) > truck.distance(target_location=truck.partner.current_location)
+
+
 def _travel_to_next_location(truck: Truck):
     _increment_drive_miles(truck)
     truck.previous_location = truck.current_location
@@ -169,7 +182,8 @@ def _return_to_hub(truck: Truck, pause_end_at_hub=None):
 def _increment_drive_miles(truck: Truck):
     miles_to_next = truck.current_location.distance_dict[truck.next_location]
     destination_mileage = truck.mileage + miles_to_next
-    expected_status_update_times = PackageHandler.get_all_expected_status_update_times(special_times=PackageHandler.today_special_times, start_time=truck.clock)
+    expected_status_update_times = PackageHandler.get_all_expected_status_update_times(
+        special_times=PackageHandler.today_special_times, start_time=truck.clock)
     while truck.mileage <= destination_mileage:
         truck.set_clock(TimeConversion.convert_miles_to_time(
             miles=truck.mileage,
@@ -190,15 +204,22 @@ def _short_detour_to_hub(truck: Truck):
     if truck.current_location.is_hub:
         return False
     return (truck.distance(to_hub=True) + truck.distance(origin_location=truck.hub_location)) <= (
-            truck.distance() * 1.5)
+            truck.distance() * 1.1)
 
 
 def _should_return_to_hub(truck: Truck, package_total_at_next_location: int, undelivered_total: int) -> bool:
     return len(truck) + undelivered_total > config.NUM_TRUCK_CAPACITY and \
         (len(truck) + package_total_at_next_location > config.NUM_TRUCK_CAPACITY or
-         (_short_detour_to_hub(truck) and len(truck) > 12) or
+         (_short_detour_to_hub(truck) and len(truck) > 3) or
          (truck.distance(to_hub=True) < 2.0 and len(truck) > 8))
-    # truck.current_location.earliest_deadline == time(hour=9) or\
+
+def _should_pause_for_delayed_packages(truck: Truck):
+    if truck.current_location.is_hub and not PackageHandler.get_deadline_packages(ignore_routed=True) and PackageHandler.get_delayed_packages(ignore_arrived=True):
+        print('YES')
+
+
+def _all_deadlines_met(target_time: time) -> bool:
+    return not PackageHandler.get_deadline_packages(target_time)
 
 
 class RouteBuilder:
@@ -214,13 +235,17 @@ class RouteBuilder:
             truck.next_location = list(next_package_set)[0].location
             print(truck)
             if _should_return_to_hub(truck, len(next_package_set), total_packages):
-                _return_to_hub(truck)
+                if _should_pause_for_delayed_packages(truck):
+                    _return_to_hub(truck, pause_end_at_hub=time(hour=9, minute=5))
+                else:
+                    _return_to_hub(truck, pause_end_at_hub=time(hour=9, minute=5))
                 truck.unload()
                 print('\nReturned to hub to reload')
                 PackageHandler.bulk_status_update(truck.clock)
                 next_package_set = _nearest_neighbors(truck, in_location_package_dict)
                 continue
             truck.record()
+            _should_pause_for_delayed_packages(truck)
             truck.add_all_packages(next_package_set)
             _travel_to_next_location(truck)
             PackageHandler.bulk_status_update(truck.clock)
