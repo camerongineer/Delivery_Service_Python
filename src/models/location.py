@@ -6,6 +6,7 @@ from datetime import time
 
 from src.config import DELIVERY_RETURN_TIME
 from src.constants.utah_cities import UtahCity
+from src.utilities.time_conversion import TimeConversion
 
 
 class Location:
@@ -23,6 +24,17 @@ class Location:
         self.has_required_truck_package = False
         self.has_unconfirmed_package = False
 
+    def __eq__(self, other):
+        if isinstance(other, Location):
+            return self.address == other.address and self.name == other.name and self.zip_code == other.zip_code
+        return False
+
+    def __hash__(self):
+        return hash(self.address + self.name)
+
+    def __repr__(self):
+        return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub} zip_code={self.zip_code})"
+
     def set_city(self, city: UtahCity):
         self.city = city
 
@@ -38,13 +50,6 @@ class Location:
     def set_earliest_deadline(self, deadline: time):
         self.earliest_deadline = deadline
 
-    def __eq__(self, other):
-        if isinstance(other, Location):
-            return self.address == other.address and self.name == other.name and self.zip_code == other.zip_code
-        return False
-
-    def __hash__(self):
-        return hash(self.address + self.name)
-
-    def __repr__(self):
-        return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub} zip_code={self.zip_code})"
+    def has_close_deadline(self, current_time, time_delta=1800):
+        return TimeConversion.is_time_at_or_before_other_time(self.earliest_deadline,
+                                                              TimeConversion.add_time_delta(current_time, time_delta))

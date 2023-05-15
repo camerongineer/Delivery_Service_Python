@@ -39,6 +39,7 @@ class PackageHandler:
     package_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
     package_hash.add_all_packages(all_packages)
     Truck.hub_location = [location for location in all_locations if location.is_hub][0]
+    today_special_times = {config.PACKAGE_9_ADDRESS_CHANGE_TIME}
 
     @staticmethod
     def load_packages(truck: Truck, package_sets: List[Set[Package]]):
@@ -181,3 +182,32 @@ class PackageHandler:
         for package in original_packages_set:
             if package in packages_to_remove:
                 original_packages_set.remove(package)
+
+    @staticmethod
+    def get_all_expected_status_update_times(special_times=None, start_time=config.PACKAGE_ARRIVAL_STATUS_UPDATE_TIME,
+                                             end_time=config.DELIVERY_RETURN_TIME, in_locations=all_locations):
+        status_updates_times = set()
+        if special_times:
+            status_updates_times = status_updates_times.union(special_times)
+        start_date_time = TimeConversion.get_datetime(start_time)
+        end_date_time = TimeConversion.get_datetime(end_time)
+        for location in in_locations:
+            if location.earliest_deadline:
+                earliest_deadline = TimeConversion.get_datetime(location.earliest_deadline)
+                if start_date_time <= earliest_deadline < end_date_time:
+                    status_updates_times.add(earliest_deadline.time())
+            if location.latest_package_arrival:
+                latest_package_arrival_time = TimeConversion.get_datetime(location.latest_package_arrival)
+                if start_date_time <= latest_package_arrival_time < end_date_time:
+                    status_updates_times.add(latest_package_arrival_time.time())
+        return status_updates_times
+
+    @staticmethod
+    def get_all_late_packages(current_time: time):
+        late_packages = set()
+        current_date_time = TimeConversion.get_datetime(current_time)
+        for package in PackageHandler.all_packages:
+            deadline_date_time = TimeConversion.get_datetime(package.deadline)
+            if not package.location.been_routed and current_date_time >= deadline_date_time:
+                late_packages.add(package)
+        return late_packages

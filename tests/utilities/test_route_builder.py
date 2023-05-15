@@ -18,23 +18,25 @@ class TestRouteBuilder(TestCase):
             self.custom_hash.add_package(package)
 
     def test_get_optimized_route(self):
-        truck = Truck(2)
-        truck.dispatch_time = time(hour=9, minute=5)
-        packages = PackageHandler.get_delayed_packages().union(PackageHandler.get_assigned_truck_packages(truck.truck_id))
+        truck_1 = Truck(1)
+        truck_2 = Truck(2)
+        truck_1.partner = truck_2
+        truck_2.partner = truck_1
+        print(truck_2.partner.current_location)
+        print(truck_1.partner.current_location)
+        truck_2.dispatch(config.DELIVERY_DISPATCH_TIME)
+        packages = PackageHandler.get_delayed_packages().union(PackageHandler.get_assigned_truck_packages(truck_2.truck_id))
 
-        # truck.pause(time(hour=8, minute=20), time(hour=8, minute=55))
-        # truck.pause(time(hour=8, minute=14), time(hour=9, minute=19))
-        # truck.pause(time(hour=8, minute=57), time(hour=8, minute=59))
-        RouteBuilder.get_optimized_route(truck, in_location_package_dict=PackageHandler.get_location_package_dict(self.packages), route_start_time=time(hour=9, minute=5))
-        # truck.pause(time(hour=9), time(hour=9, minute=30))
+        RouteBuilder.get_optimized_route(truck_2, in_location_package_dict=PackageHandler.get_location_package_dict(self.packages))
+        # truck_2.pause(time(hour=9), time(hour=9, minute=30))
         if len(RouteBuilder.get_routed_locations()) + 1 == len(self.locations) and Truck.hub_location not in RouteBuilder.get_routed_locations():
             print("ROUTING COMPLETE")
-        for mile, (stop_time, last_location, current_location, next_location) in truck._travel_ledger.items():
+        for mile, (stop_time, last_location, current_location, next_location) in truck_2._travel_ledger.items():
             print(f'miles={round(mile, ndigits=1)}, time={stop_time}, location={current_location.name}, address={current_location.address}')
-        # print(len(truck._travel_ledger))
+        # print(len(truck_2._travel_ledger))
         # current_time = time(9, 47, 20)
-        # print(truck.get_current_location(current_time))
-        # print(truck.completion_time)
+        # print(truck_2.get_current_location(current_time))
+        # print(truck_2.completion_time)
         # for package in self.packages:
         #     print(package.status_update_dict)
 

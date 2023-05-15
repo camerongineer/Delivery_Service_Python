@@ -1,6 +1,5 @@
 from datetime import time
 
-
 __all__ = ['Truck']
 
 from src import config
@@ -18,6 +17,8 @@ class Truck(CustomHash):
         self._truck_id = truck_id
         self._mileage = 0.0
         self._clock = time.min
+        self._partner = None
+        self._is_dispatched = False
         self._has_driver = False
         self._dispatch_time = None
         self._completion_time = None
@@ -46,6 +47,14 @@ remaining capacity: {self._capacity - self._size}'''
         return self._clock
 
     @property
+    def partner(self):
+        return self._partner
+
+    @property
+    def is_dispatched(self):
+        return self._is_dispatched
+
+    @property
     def has_driver(self):
         return self._has_driver
 
@@ -69,17 +78,25 @@ remaining capacity: {self._capacity - self._size}'''
     def next_location(self):
         return self._next_location
 
+    @property
+    def pause_ledger(self):
+        return self._pause_ledger
+
+    @partner.setter
+    def partner(self, value):
+        if type(value) == type(self) and value is not self:
+            self._partner = value
+        else:
+            print('Partner must another Truck')
+
     @dispatch_time.setter
     def dispatch_time(self, value: time):
-        self._dispatch_time = value
+        if not self._dispatch_time:
+            self._dispatch_time = value
 
     @completion_time.setter
     def completion_time(self, value: time):
         self._completion_time = value
-
-    @property
-    def pause_ledger(self):
-        return self._pause_ledger
 
     @has_driver.setter
     def has_driver(self, value):
@@ -109,11 +126,16 @@ remaining capacity: {self._capacity - self._size}'''
     def packages(self):
         return self._arr
 
+    def dispatch(self, current_time):
+        if not self._is_dispatched:
+            self._dispatch_time = current_time
+            self._is_dispatched = True
+
     def unload(self):
         self.clear()
 
     def record(self):
-        self._travel_ledger[self.mileage] =\
+        self._travel_ledger[self.mileage] = \
             (self.clock, self.previous_location, self.current_location, self.next_location)
 
     def drive(self):

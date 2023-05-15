@@ -35,3 +35,13 @@ class TestTimeConversion(TestCase):
         assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 45
         current_time = time(hour=10, minute=30)
         assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 60
+
+    def test_add_time_delta(self):
+        current_time = time(hour=9)
+        delta_seconds = 1800
+        new_time = TimeConversion.add_time_delta(current_time, delta_seconds)
+        assert current_time != new_time
+        assert new_time == time(hour=9, minute=30)
+        delta_seconds = -1800
+        new_time = TimeConversion.add_time_delta(new_time, delta_seconds)
+        assert current_time == new_time

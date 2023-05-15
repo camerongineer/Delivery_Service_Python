@@ -22,7 +22,7 @@ class TimeConversion:
         if miles <= 0:
             return start_time
         time_seconds = ((miles / miles_per_hour) * 3600) + pause_seconds
-        return (TimeConversion.get_datetime(start_time) + timedelta(seconds=time_seconds)).time()
+        return TimeConversion.add_time_delta(start_time, time_seconds)
 
     @staticmethod
     def get_datetime(in_time: time) -> datetime:
@@ -52,3 +52,7 @@ class TimeConversion:
                 time_to_compare = pause_end_time if pause_end_time < current_time else current_time
                 total_paused_seconds += TimeConversion.get_seconds_between_times(pause_start_time, time_to_compare)
         return total_paused_seconds
+
+    @staticmethod
+    def add_time_delta(start_time: time, time_seconds: int):
+        return (TimeConversion.get_datetime(start_time) + timedelta(seconds=time_seconds)).time()
