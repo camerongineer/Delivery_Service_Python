@@ -31,9 +31,16 @@ class PackageNotArrivedError(RouteBuilderError):
                                  f'| Package ID: {package.package_id}')
 
 
-class TruckCapacityExceededError(RouteBuilderError, capacity=config.NUM_TRUCK_CAPACITY):
+class TruckCapacityExceededError(RouteBuilderError):
     """Raised when the number of packages allowed on a truck is exceeded"""
 
-    def __init__(self, package: Package):
-        super().__init__(message=f'This route plan results truck being loaded over the allowed capacity '
-                                 f'| Package ID: {package.package_id}')
+    def __init__(self, capacity=config.NUM_TRUCK_CAPACITY):
+        self._capacity = capacity
+        super().__init__(message=f'This route plan results truck being loaded over the allowed capacity: {capacity}')
+
+
+class InvalidRouteRunError(RouteBuilderError):
+    """Raised when route run is created with 2 different assigned trucks ids"""
+
+    def __init__(self):
+        super().__init__(message=f'This route plan results in route run with 2 different assigned trucks')

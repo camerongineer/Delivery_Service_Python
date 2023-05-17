@@ -16,6 +16,7 @@ class Location:
         self.distance_dict = dict()
         self.is_hub = is_hub
         self.been_visited = False
+        self.been_assigned = False
         self.been_routed = False
         self.earliest_deadline = DELIVERY_RETURN_TIME
         self.latest_package_arrival = None

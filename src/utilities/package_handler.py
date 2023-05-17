@@ -79,13 +79,6 @@ class PackageHandler:
                 print(
                     f'Package: {package.package_id:02} address changed from "{old_location}" to "{new_location} at {current_time}"')
 
-    # @staticmethod
-    # def delayed_packages_arrived(in_packages: List[Package], current_time: time):
-    #     latest_arrival = in_packages[0].location.latest_package_arrival
-    #     if TimeConversion.is_time_at_or_before_other_time(latest_arrival, current_time):
-    #         for in_package in in_packages:
-    #             in_package.status = DeliveryStatus.AT_HUB
-
     @staticmethod
     def get_location_package_dict(in_packages=all_packages):
         location_package_dict = dict()
@@ -96,9 +89,9 @@ class PackageHandler:
         return location_package_dict
 
     @staticmethod
-    def get_location_packages(location: Location, in_packages=all_packages):
+    def get_location_packages(location: Location, in_packages=all_packages) -> Set[Package]:
         if location not in PackageHandler.get_location_package_dict(in_packages).keys():
-            return None
+            return set()
         return PackageHandler.get_location_package_dict(in_packages)[location]
 
     @staticmethod
@@ -144,20 +137,30 @@ class PackageHandler:
                 bundle_map[package.package_id] = package_ids
         return bundle_map
 
+    # @staticmethod
+    # def get_bundled_packages(packages=all_packages) -> List[Set[Package]]:
+    #     custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
+    #     custom_hash.add_all_packages(packages)
+    #     bundle_map = PackageHandler.get_bundled_package_ids(packages)
+    #     package_bundle_sets = []
+    #     for package_id in bundle_map.keys():
+    #         bundle_set = set()
+    #         bundle_set.add(custom_hash.get_package(package_id))
+    #         for bundled_package_id in bundle_map[package_id]:
+    #             bundle_set.add(custom_hash.get_package(bundled_package_id))
+    #         package_bundle_sets.append(bundle_set)
+    #     PackageHandler.unionize_bundled_sets(package_bundle_sets)
+    #     return package_bundle_sets    \
+    #
     @staticmethod
-    def get_bundled_packages(packages=all_packages) -> List[Set[Package]]:
-        custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
-        custom_hash.add_all_packages(packages)
+    def get_bundled_packages(packages=all_packages) -> Set[Package]:
+        package_bundle_set = set()
         bundle_map = PackageHandler.get_bundled_package_ids(packages)
-        package_bundle_sets = []
         for package_id in bundle_map.keys():
-            bundle_set = set()
-            bundle_set.add(custom_hash.get_package(package_id))
+            package_bundle_set.add(PackageHandler.package_hash.get_package(package_id))
             for bundled_package_id in bundle_map[package_id]:
-                bundle_set.add(custom_hash.get_package(bundled_package_id))
-            package_bundle_sets.append(bundle_set)
-        PackageHandler.unionize_bundled_sets(package_bundle_sets)
-        return package_bundle_sets
+                package_bundle_set.add(PackageHandler.package_hash.get_package(bundled_package_id))
+        return package_bundle_set
 
     @staticmethod
     def get_delayed_packages(packages=all_packages, ignore_arrived=False) -> Set[Package]:
@@ -191,9 +194,7 @@ class PackageHandler:
 
     @staticmethod
     def subtract_package_set(packages_to_remove: Set[Package], original_packages_set: Set[Package]):
-        for package in original_packages_set:
-            if package in packages_to_remove:
-                original_packages_set.remove(package)
+        return original_packages_set.difference(packages_to_remove)
 
     @staticmethod
     def get_all_expected_status_update_times(special_times=None, start_time=config.PACKAGE_ARRIVAL_STATUS_UPDATE_TIME,
@@ -223,3 +224,50 @@ class PackageHandler:
             if not package.location.been_routed and current_date_time >= deadline_date_time:
                 late_packages.add(package)
         return late_packages
+
+    @staticmethod
+    def get_package_locations(in_packages: Set[Package]) -> Set[Location]:
+        locations = set()
+        for package in in_packages:
+            locations.add(package.location)
+        return locations
+
+    @staticmethod
+    def get_all_packages_from_locations(in_locations: Set[Location] = all_locations, in_location: Location = None):
+        if in_location:
+            return PackageHandler.get_location_packages(in_location)
+        else:
+            out_packages = set()
+            for location in in_locations:
+                out_packages = out_packages.union(PackageHandler.get_location_packages(location))
+            return out_packages
+
+    @staticmethod
+    def get_closest_packages(origin_location: Location, minimum=1, ignore_delayed_locations=False,
+                             ignore_early_deadline_locations=False):
+        locations_distance_sorted = sorted(origin_location.distance_dict.items(), key=lambda item: item[1])
+        closest_packages = set()
+        if not origin_location.been_assigned:
+            closest_packages = closest_packages.union(PackageHandler.get_location_packages(origin_location))
+        for i in range(len(locations_distance_sorted)):
+            next_closest_location = locations_distance_sorted[i][0]
+            if (
+                    ignore_early_deadline_locations and next_closest_location.earliest_deadline != config.DELIVERY_RETURN_TIME) or (
+                    ignore_delayed_locations and next_closest_location.latest_package_arrival != config.STANDARD_PACKAGE_ARRIVAL_TIME):
+                continue
+            if minimum <= len(closest_packages):
+                return closest_packages
+            if not next_closest_location.been_assigned:
+                closest_packages = closest_packages.union(PackageHandler.get_location_packages(next_closest_location))
+        return closest_packages
+
+    @staticmethod
+    def get_assigned_truck_id(in_location: Location):
+        location_packages = PackageHandler.get_location_packages(in_location)
+        truck_id = None
+        for package in location_packages:
+            if truck_id and truck_id != package.assigned_truck_id:
+                return None
+            if package.assigned_truck_id:
+                truck_id = package.assigned_truck_id
+        return truck_id

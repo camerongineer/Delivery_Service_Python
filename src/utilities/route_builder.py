@@ -4,6 +4,7 @@ from typing import List, Set
 
 from src import config
 from src.constants.delivery_status import DeliveryStatus
+from src.exceptions.route_builder_error import InvalidRouteRunError
 from src.models.location import Location
 from src.models.package import Package
 from src.models.truck import Truck
@@ -31,6 +32,7 @@ def _better_solution(nearest: Location, truck: Truck, in_location_package_dict: 
     sorted_location_dict = sorted(truck.current_location.distance_dict.items(), key=lambda _location: _location[1])
     sorted_nearest_location_dict = sorted(nearest.distance_dict.items(), key=lambda _location: _location[1])
     closest_to_nearest = None
+
     for location_from_nearest, mileage_from_nearest in sorted_nearest_location_dict:
         if not location_from_nearest.is_hub and location_from_nearest is not truck.current_location:
             nearest_package_set = in_location_package_dict[location_from_nearest]
@@ -39,7 +41,7 @@ def _better_solution(nearest: Location, truck: Truck, in_location_package_dict: 
                 break
     if not closest_to_nearest:
         return
-    time_delta = 3600
+    time_delta = 5400
     sum_of_nearest_close_deadlines = len([location for location in [nearest, closest_to_nearest] if
                                           location.has_close_deadline(truck.clock, time_delta=time_delta)])
     better_solutions = dict()
@@ -61,8 +63,7 @@ def _better_solution(nearest: Location, truck: Truck, in_location_package_dict: 
             sum_of_better_solution_close_deadlines = len([location for location in [first_location, second_location] if
                                                           location.has_close_deadline(truck.clock,
                                                                                       time_delta=time_delta)])
-            if estimated_package_total > config.NUM_TRUCK_CAPACITY or sum_of_better_solution_close_deadlines < sum_of_nearest_close_deadlines:
-                print('Heading to close_deadline')
+            if sum_of_better_solution_close_deadlines < sum_of_nearest_close_deadlines:
                 return
             if estimated_package_total > config.NUM_TRUCK_CAPACITY / 2:
                 total_distance += second_location.distance_dict[Truck.hub_location]
@@ -102,6 +103,84 @@ def _nearest_neighbors(truck: Truck, in_location_package_dict: dict):
                 return out_packages
     return None
 
+
+def _two_opt(truck: Truck):
+    valid_options = dict()
+    for first_location, first_distance in truck.current_location.distance_dict.items():
+        if not _is_valid_option(truck, first_location):
+            continue
+        for second_location, second_distance in truck.current_location.distance_dict.items():
+            if _is_valid_option(truck, second_location, first_location):
+                miles_to_second = (truck.distance(target_location=first_location) +
+                                   first_location.distance_dict[second_location])
+                first_location_package_total = len(PackageHandler.get_location_packages(first_location))
+                second_location_package_total = len(PackageHandler.get_location_packages(second_location))
+                if len(truck) + first_location_package_total + second_location_package_total >= config.NUM_TRUCK_CAPACITY * .6:
+                    miles_to_second += second_location.distance_dict[truck.hub_location]
+                valid_options[first_location] = (miles_to_second, second_location)
+    return _best_option(truck, valid_options)
+
+
+def _is_valid_option(truck: Truck, location: Location, other_location=None) -> bool:
+    return not location.is_hub and not location.been_routed and location is not other_location and \
+        not _in_close_proximity_of_undeliverable(truck, location)
+
+
+def _best_option(truck: Truck, valid_options: dict):
+    sorted_valid_options = sorted(valid_options.items(), key=lambda x: x[1][0])
+    if not valid_options:
+        return None
+    bundled_packages = PackageHandler.get_bundled_packages()
+
+    for (first_location), (total_mileage, second_location) in sorted_valid_options:
+        first_location_packages = PackageHandler.get_location_packages(first_location)
+        second_location_packages = PackageHandler.get_location_packages(second_location)
+
+        if first_location_packages.intersection(bundled_packages) and \
+                second_location_packages.intersection(bundled_packages):
+            return first_location_packages
+
+    for first_location, (total_mileage, second_location) in sorted_valid_options:
+        first_location_packages = PackageHandler.get_location_packages(first_location)
+        if first_location_packages.intersection(bundled_packages):
+            return first_location_packages
+
+    return PackageHandler.get_location_packages(sorted_valid_options[0][0])
+
+
+def _find_furthest_opposites_from_hub():
+    locations_from_hub = sorted(Truck.hub_location.distance_dict.items(), key=lambda item: item[1], reverse=True)
+    furthest_location = locations_from_hub[0][0]
+    locations_from_furthest = sorted(furthest_location.distance_dict.items(), key=lambda item: item[1], reverse=True)
+    for i in range(len(locations_from_furthest)):
+        opposite_location = locations_from_furthest[i][0]
+        if opposite_location is Truck.hub_location:
+            continue
+        if _is_good_furthest_opposite(furthest_location, opposite_location):
+            return furthest_location, opposite_location
+
+
+def _is_good_furthest_opposite(further_location: Location, opposite_location: Location):
+    if further_location.has_required_truck_package or opposite_location.has_required_truck_package:
+        further_truck_id = PackageHandler.get_assigned_truck_id(further_location)
+        opposite_truck_id = PackageHandler.get_assigned_truck_id(opposite_location)
+        if (further_truck_id and opposite_truck_id) and further_truck_id != opposite_truck_id:
+            return False
+    bundled_locations = PackageHandler.get_package_locations(PackageHandler.get_bundled_packages())
+    if further_location in bundled_locations and opposite_location in bundled_locations:
+        return False
+    return True
+
+def _get_furthest_away_from_two_opposites(further_location: Location, opposite_location: Location):
+    max_mileage = 0
+    furthest_away = None
+    for location in PackageHandler.all_locations:
+        if location.is_hub or location is further_location or location is opposite_location:
+            continue
+        miles = further_location.distance_dict[location] + location.distance_dict[opposite_location]
+        if miles > max_mileage:
+            furthest_away = location
+    return furthest_away
 
 def _miles_from_other_location(origin_location: Location, other_location: Location):
     if origin_location is other_location:
@@ -200,17 +279,17 @@ def _increment_drive_miles(truck: Truck):
         truck.drive()
 
 
-def _short_detour_to_hub(truck: Truck):
+def _short_detour_to_hub(truck: Truck, multiplier: float):
     if truck.current_location.is_hub:
         return False
     return (truck.distance(to_hub=True) + truck.distance(origin_location=truck.hub_location)) <= (
-            truck.distance() * 1.1)
+            truck.distance() * multiplier)
 
 
 def _should_return_to_hub(truck: Truck, package_total_at_next_location: int, undelivered_total: int) -> bool:
     return len(truck) + undelivered_total > config.NUM_TRUCK_CAPACITY and \
         (len(truck) + package_total_at_next_location > config.NUM_TRUCK_CAPACITY or
-         (_short_detour_to_hub(truck) and len(truck) > 3) or
+         ((_short_detour_to_hub(truck, 1.1) and len(truck) > 4) or (_short_detour_to_hub(truck, 1.5) and len(truck) > 7)) or
          (truck.distance(to_hub=True) < 2.0 and len(truck) > 8))
 
 def _should_pause_for_delayed_packages(truck: Truck):
@@ -222,13 +301,94 @@ def _all_deadlines_met(target_time: time) -> bool:
     return not PackageHandler.get_deadline_packages(target_time)
 
 
+def _get_assigned_truck_id_from_package_set(in_packages) -> int:
+    truck_id = -1
+    for package in in_packages:
+        if truck_id == -1 and package.assigned_truck_id:
+            truck_id = package.assigned_truck_id
+        elif (truck_id != -1 and package.assigned_truck_id) and truck_id != package.assigned_truck_id:
+            raise InvalidRouteRunError
+    return truck_id
+
+
+def _get_truck_id_package_tuple(in_packages):
+    return _get_assigned_truck_id_from_package_set(in_packages), in_packages
+
+
+def _get_starter_route_runs(early_return_run_locations: Set[Location]) -> dict:
+    runs = dict()
+    print(early_return_run_locations)
+    furthest, opposite = _find_furthest_opposites_from_hub()
+    furthest_between_opposites = _get_furthest_away_from_two_opposites(furthest, opposite)
+    furthest_truck_id, furthest_closest_packages = \
+        _get_truck_id_package_tuple(PackageHandler.get_closest_packages(furthest, minimum=10))
+    opposite_truck_id, opposite_closest_packages = \
+        _get_truck_id_package_tuple(PackageHandler.get_closest_packages(opposite, minimum=10))
+    furthest_between_truck_id, furthest_between_packages = \
+        _get_truck_id_package_tuple(PackageHandler.get_closest_packages(furthest_between_opposites, minimum=10))
+    if furthest_closest_packages.intersection(opposite_closest_packages):
+        if furthest_truck_id == -1 and opposite_truck_id != -1:
+            furthest_truck_id = opposite_truck_id
+        elif furthest_truck_id != -1 and opposite_truck_id == -1:
+            opposite_truck_id = furthest_truck_id
+    if furthest_truck_id in runs:
+        runs[furthest_truck_id].append(furthest_closest_packages)
+    else:
+        runs[furthest_truck_id] = [furthest_closest_packages]
+
+    if opposite_truck_id in runs:
+        runs[opposite_truck_id].append(opposite_closest_packages)
+    else:
+        runs[opposite_truck_id] = [opposite_closest_packages]
+
+    if furthest_between_truck_id in runs:
+        runs[furthest_between_truck_id].append(furthest_between_packages)
+    else:
+        runs[furthest_between_truck_id] = [furthest_between_packages]
+
+    return runs
+
+def _get_early_return_run_locations():
+    delayed_packages = PackageHandler.get_delayed_packages()
+    if not delayed_packages:
+        return None
+    latest_delay = None
+    for package in delayed_packages:
+        if not latest_delay:
+            latest_delay = package.hub_arrival_time
+        else:
+            if TimeConversion.is_time_at_or_before_other_time(latest_delay, package.hub_arrival_time):
+                latest_delay = package.hub_arrival_time
+    early_run = set()
+    for package in PackageHandler.all_packages:
+        if TimeConversion.is_time_at_or_before_other_time(package.deadline, latest_delay):
+            early_run.add(package.location)
+    bundled_packages_locations = PackageHandler.get_package_locations(PackageHandler.get_bundled_packages())
+    if early_run.intersection(bundled_packages_locations):
+        early_run = early_run.union(bundled_packages_locations)
+    return early_run
+
 class RouteBuilder:
     @staticmethod
     def get_optimized_route(truck: Truck, in_location_package_dict: dict = PackageHandler.all_packages,
                             route_start_time=config.DELIVERY_DISPATCH_TIME):
+        furthest, opposite = _find_furthest_opposites_from_hub()
+
+        print('\n\n')
+        print(RouteBuilder.build_route_runs())
+        furthest_packages = (PackageHandler.get_closest_packages(furthest, minimum=8))
+        opposite_packages = (PackageHandler.get_closest_packages(opposite, minimum=8))
+
+
+        for package in furthest_packages.intersection(PackageHandler.get_bundled_packages()):
+            print(package.location)
+        print("\n\n")
+        for package in opposite_packages.intersection(PackageHandler.get_bundled_packages()):
+            print(package.location)
         truck.set_clock(route_start_time)
         PackageHandler.bulk_status_update(truck.clock)
-        next_package_set = _nearest_neighbors(truck, in_location_package_dict)
+        # next_package_set = _nearest_neighbors(truck, in_location_package_dict)
+        next_package_set = _two_opt(truck)
         total_packages = sum(len(packages) for packages in in_location_package_dict.values())
         while next_package_set:
             total_packages -= len(next_package_set)
@@ -249,7 +409,35 @@ class RouteBuilder:
             truck.add_all_packages(next_package_set)
             _travel_to_next_location(truck)
             PackageHandler.bulk_status_update(truck.clock)
-            next_package_set = _nearest_neighbors(truck, in_location_package_dict)
+            # next_package_set = _nearest_neighbors(truck, in_location_package_dict)
+            next_package_set = _two_opt(truck)
+        truck.completion_time = truck.clock
+
+    @staticmethod
+    def build_optimized_route_run(truck: Truck, route_run_locations: Set[Location], is_return_run=True,
+                                  is_early_return_run=False, run_start_time=config.DELIVERY_DISPATCH_TIME):
+        truck.set_clock(run_start_time)
+        PackageHandler.bulk_status_update(truck.clock)
+        next_truck_location = _two_opt(truck, route_run_locations, is_return_run, is_early_return_run)
+        while next_truck_location is not Truck.hub_location:
+            truck.next_location = next_truck_location
+            if _should_return_to_hub(truck, len(next_package_set), total_packages):
+                if _should_pause_for_delayed_packages(truck):
+                    _return_to_hub(truck, pause_end_at_hub=time(hour=9, minute=5))
+                else:
+                    _return_to_hub(truck, pause_end_at_hub=time(hour=9, minute=5))
+                truck.unload()
+                print('\nReturned to hub to reload')
+                PackageHandler.bulk_status_update(truck.clock)
+                next_truck_location = _two_opt(truck, route_run_locations, is_return_run, is_early_return_run)
+                continue
+            truck.record()
+            _should_pause_for_delayed_packages(truck)
+            truck.add_all_packages(next_package_set)
+            _travel_to_next_location(truck)
+            PackageHandler.bulk_status_update(truck.clock)
+            # next_package_set = _nearest_neighbors(truck, in_location_package_dict)
+            next_truck_location = _two_opt(truck)
         truck.completion_time = truck.clock
 
     # @staticmethod
@@ -283,3 +471,31 @@ class RouteBuilder:
         if in_packages:
             routed_locations = set([package.location for package in in_packages if package.location.been_routed])
         return routed_locations
+
+    @staticmethod
+    def build_route():
+        pass
+
+    @staticmethod
+    def build_route_runs():
+        minimum_route_runs = (len(PackageHandler.all_packages) // config.NUM_TRUCK_CAPACITY) + 1
+        early_return_run_locations = _get_early_return_run_locations()
+        print(len(PackageHandler.get_all_packages_from_locations(early_return_run_locations)))
+        runs = _get_starter_route_runs(early_return_run_locations)
+        for truck_id, runs in runs.items():
+            for package_set in runs:
+                print('Run start')
+                delayed_stops = 0
+                early_deadlines = 0
+                for package in package_set:
+                    print(package.location.name, package.location.address)
+                    print(package.hub_arrival_time)
+                    print(package.deadline)
+                    if package.deadline != config.DELIVERY_RETURN_TIME:
+                        early_deadlines += 1
+                    if package.hub_arrival_time != config.STANDARD_PACKAGE_ARRIVAL_TIME:
+                        delayed_stops += 1
+                    print('\n\n')
+                print('delays_stops:', delayed_stops)
+                print('early_deadlines:', early_deadlines)
+        return runs

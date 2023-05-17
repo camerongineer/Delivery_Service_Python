@@ -108,19 +108,16 @@ class TestPackageHandler(TestCase):
         assert sum(len(package_list) for package_list in location_package_dict.values()) == len(self.packages)
 
     def test_get_bundled_packages(self):
-        package_bundles = PackageHandler.get_bundled_packages()
-        assert len(package_bundles) == 1
-        bundle = package_bundles.pop()
-        assert not package_bundles
+        bundled_packages = PackageHandler.get_bundled_packages()
         bundled_package_ids = [13, 14, 15, 16, 19, 20]
-        assert len(bundle) == len(bundled_package_ids)
-        for package in bundle:
+        assert len(bundled_packages) == len(bundled_package_ids)
+        for package in bundled_packages:
             assert package.package_id in bundled_package_ids
 
     def test_get_all_packages_at_bundled_locations(self):
-        package_bundle = PackageHandler.get_bundled_packages().pop()
+        bundled_packages = PackageHandler.get_bundled_packages()
         all_packages_at_bundle_locations =\
-            PackageHandler.get_all_packages_at_bundled_locations(list(package_bundle))
+            PackageHandler.get_all_packages_at_bundled_locations(list(bundled_packages))
         required_bundled_package_ids = [13, 14, 15, 16, 19, 20, 21, 34, 39]
         assert len(all_packages_at_bundle_locations) == len(required_bundled_package_ids)
         for package_id in required_bundled_package_ids:

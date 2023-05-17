@@ -18,6 +18,7 @@ class TestRouteBuilder(TestCase):
             self.custom_hash.add_package(package)
 
     def test_get_optimized_route(self):
+
         truck_1 = Truck(1)
         truck_2 = Truck(2)
         truck_1.partner = truck_2
