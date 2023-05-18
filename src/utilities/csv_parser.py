@@ -1,7 +1,9 @@
 import csv
 import re
+from copy import copy
 from datetime import datetime, time
-from typing import Set
+from functools import reduce
+from typing import List, Set
 
 from src import config
 from src.constants.delivery_status import DeliveryStatus
@@ -9,7 +11,6 @@ from src.constants.utah_cities import UtahCity
 from src.models.location import Location
 from src.models.package import Package
 from src.models.truck import Truck
-
 
 __all__ = ['CsvParser']
 
@@ -56,6 +57,65 @@ def _set_latest_location_package_arrival(location: Location, in_arrival_time: ti
         in_arrival = TimeConversion.get_datetime(in_arrival_time)
         if in_arrival > current_latest_location_arrival:
             location.latest_package_arrival = in_arrival_time
+
+
+def _set_bundled_packages_ids(package):
+    if str(package.special_note).startswith('Must be delivered with '):
+        pattern = r'\d+'
+        package_ids = [int(match) for match in re.findall(pattern, package.special_note)]
+        package.bundled_package_ids = package_ids
+        package.location.has_bundled_package = True
+
+
+def _get_bundle_id_sets(packages: List[Package]) -> List[Set[int]]:
+    bundle_id_sets = []
+    for package in packages:
+        if package.bundled_package_ids:
+            if not bundle_id_sets:
+                bundle_set = {package.package_id}
+                for package_id in package.bundled_package_ids:
+                    bundle_set.add(package_id)
+                bundle_id_sets.append(bundle_set)
+            else:
+                for bundle_set in bundle_id_sets:
+                    if package.package_id in bundle_set:
+                        for package_id in package.bundled_package_ids:
+                            bundle_set.add(package_id)
+                        break
+                    else:
+                        bundle_set = {package.package_id}
+                        for package_id in package.bundled_package_ids:
+                            bundle_set.add(package_id)
+                        bundle_id_sets.append(bundle_set)
+    return bundle_id_sets
+
+
+def _union_id_sets(bundle_id_list):
+    if len(bundle_id_list) == 1:
+        return bundle_id_list[0]
+    else:
+        result = bundle_id_list[0]
+        for i in range(1, len(bundle_id_list)):
+            result = result.union(bundle_id_list[i])
+        return result
+
+
+def _set_bundled_packages(packages: List[Package]):
+    bundle_id_sets = list(map(frozenset, _get_bundle_id_sets(packages)))
+    bundle_id_sets = list(set(bundle_id_sets))
+    bundle_id_sets = [{s for s in _union_id_sets(bundle_id_sets)}]
+    for id_set in bundle_id_sets:
+        for package_id in id_set:
+            if type(package_id) is not int:
+                continue
+            for package in packages:
+                if package.package_id == package_id:
+                    id_set.remove(package_id)
+                    id_set.add(package)
+    for bundle_set in bundle_id_sets:
+        for package in bundle_set:
+            package.bundled_package_set = copy(bundle_set)
+            package.bundled_package_set.remove(package)
 
 
 class CsvParser:
@@ -134,5 +194,8 @@ class CsvParser:
                 _set_earliest_location_deadline(package.location, package.deadline)
                 _set_latest_location_package_arrival(package.location, package.hub_arrival_time)
                 _set_assigned_truck(package)
+                _set_bundled_packages_ids(package)
                 packages.append(package)
+                package.location.package_set.add(package)
+            _set_bundled_packages(packages)
         return packages

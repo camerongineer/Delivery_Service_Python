@@ -25,6 +25,8 @@ class TestCsvParser(TestCase):
             assert package.weight and isinstance(package.weight, int)
             assert package.status is DeliveryStatus.ON_ROUTE_TO_DEPOT if\
                    package.special_note.startswith('Delayed') else DeliveryStatus.AT_HUB
+            assert package.bundled_package_ids if package.special_note.startswith('Must be delivered with') else \
+                not package.bundled_package_ids
             if package.special_note.startswith('Delayed'):
                 assert package.hub_arrival_time != config.STANDARD_PACKAGE_ARRIVAL_TIME
             else:
@@ -35,6 +37,9 @@ class TestCsvParser(TestCase):
                    TimeConversion.get_datetime(package.deadline)
             assert TimeConversion.get_datetime(package.location.latest_package_arrival) >= \
                    TimeConversion.get_datetime(package.hub_arrival_time)
+            assert package in package.location
+
+
 
     def test_initialize_locations(self):
         hubs = 0

@@ -61,7 +61,8 @@ class TestPackageHandler(TestCase):
         assert not package_to_update.is_verified_address
         assert package_to_update.location.address == '300 State St'
         assert package_to_update.location.zip_code == 84103
-        assert len(PackageHandler.get_location_package_dict(self.packages)[original_location]) == 3
+        assert original_location.package_total() == 3
+        assert package_to_update in original_location
         assert not PackageHandler.update_delivery_location(
             locations_list=self.locations, package=package_to_update, updated_address='')
         assert not package_to_update.is_verified_address
@@ -73,9 +74,11 @@ class TestPackageHandler(TestCase):
         assert package_to_update.location.address == '410 S State St'
         assert package_to_update.location.zip_code == 84111
         assert package_to_update.is_verified_address
-        assert len(PackageHandler.get_location_package_dict(self.packages)[original_location]) == 2
+        assert original_location.package_total() == 2
         new_location = package_to_update.location
-        assert len(PackageHandler.get_location_package_dict(self.packages)[new_location]) == 4
+        assert new_location.package_total() == 4
+        assert package_to_update in new_location
+        assert package_to_update not in original_location
 
     # def test_bulk_status_update(self):
     #     current_time = time(hour=7)
@@ -108,20 +111,34 @@ class TestPackageHandler(TestCase):
         assert sum(len(package_list) for package_list in location_package_dict.values()) == len(self.packages)
 
     def test_get_bundled_packages(self):
-        bundled_packages = PackageHandler.get_bundled_packages()
+        bundled_packages = PackageHandler.get_bundled_packages(all_location_packages=False)
         bundled_package_ids = [13, 14, 15, 16, 19, 20]
         assert len(bundled_packages) == len(bundled_package_ids)
         for package in bundled_packages:
             assert package.package_id in bundled_package_ids
 
     def test_get_all_packages_at_bundled_locations(self):
-        bundled_packages = PackageHandler.get_bundled_packages()
-        all_packages_at_bundle_locations =\
-            PackageHandler.get_all_packages_at_bundled_locations(list(bundled_packages))
+        all_packages_at_bundle_locations = PackageHandler.get_bundled_packages(all_location_packages=True)
         required_bundled_package_ids = [13, 14, 15, 16, 19, 20, 21, 34, 39]
         assert len(all_packages_at_bundle_locations) == len(required_bundled_package_ids)
         for package_id in required_bundled_package_ids:
             assert self.custom_hash.get_package(package_id) in all_packages_at_bundle_locations
+
+    def test_ignore_assigned_at_bundled_locations(self):
+        bundled_packages = PackageHandler.get_bundled_packages(ignore_assigned=True)
+        bundled_package_ids = [13, 14, 15, 16, 19, 20]
+        assert len(bundled_packages) == len(bundled_package_ids)
+        location_to_assign = self.custom_hash.get_package(20).location
+        location_to_assign.been_assigned = True
+        bundled_packages = PackageHandler.get_bundled_packages(ignore_assigned=True)
+        bundled_package_ids = [13, 14, 15, 16, 19]
+        assert len(bundled_packages) == len(bundled_package_ids)
+        all_bundled_packages = PackageHandler.get_bundled_packages(all_location_packages=True, ignore_assigned=True)
+        all_bundled_package_ids = [13, 14, 15, 16, 19, 34, 39]
+        assert len(all_bundled_packages) == len(all_bundled_package_ids)
+        for package in all_bundled_packages:
+            assert not package.location.been_assigned
+            assert package.package_id in all_bundled_package_ids
 
     def test_get_assigned_truck_packages(self):
         required_truck_id = 2

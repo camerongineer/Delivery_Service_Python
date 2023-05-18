@@ -1,4 +1,5 @@
 import re
+from copy import copy
 from datetime import time
 from typing import List, Set
 
@@ -53,13 +54,20 @@ class PackageHandler:
             return True
 
     @staticmethod
+    def get_run_package_total(ordered_run_list: List[Location]):
+        pass
+
+    @staticmethod
     def update_delivery_location(locations_list: List[Location], package: Package, updated_address: str):
         try:
             address, city, state_zip = updated_address.split(', ')
             zip_code = int(state_zip.split(' ')[1])
             for location in locations_list:
                 if str(address).startswith(location.address) and location.zip_code == zip_code:
+                    old_location = package.location
+                    old_location.package_set.remove(package)
                     package.location = location
+                    package.location.package_set.add(package)
                     package.is_verified_address = True
                     return True
         except (ValueError, TypeError):
@@ -153,13 +161,24 @@ class PackageHandler:
     #     return package_bundle_sets    \
     #
     @staticmethod
-    def get_bundled_packages(packages=all_packages) -> Set[Package]:
+    def get_bundled_packages(locations=all_locations, all_location_packages=False, ignore_assigned=False) -> Set[Package]:
         package_bundle_set = set()
-        bundle_map = PackageHandler.get_bundled_package_ids(packages)
-        for package_id in bundle_map.keys():
-            package_bundle_set.add(PackageHandler.package_hash.get_package(package_id))
-            for bundled_package_id in bundle_map[package_id]:
-                package_bundle_set.add(PackageHandler.package_hash.get_package(bundled_package_id))
+        for location in locations:
+            if location.has_bundled_package:
+                for package in location.package_set:
+                    if package.bundled_package_set:
+                        package_bundle_set.update(package.bundled_package_set)
+        if ignore_assigned:
+            non_assigned_set = copy(package_bundle_set)
+            for package in package_bundle_set:
+                if package.location.been_assigned:
+                    non_assigned_set -= package.location.package_set
+            package_bundle_set = non_assigned_set
+        if all_location_packages:
+            full_set = set()
+            for package in package_bundle_set:
+                full_set.update(package.location.package_set)
+            package_bundle_set = full_set
         return package_bundle_set
 
     @staticmethod
@@ -233,27 +252,32 @@ class PackageHandler:
         return locations
 
     @staticmethod
-    def get_all_packages_from_locations(in_locations: Set[Location] = all_locations, in_location: Location = None):
+    def get_all_packages_from_locations(in_locations=all_locations, in_location: Location = None, ignore_route=False):
+        out_packages = set()
         if in_location:
-            return PackageHandler.get_location_packages(in_location)
+            out_packages.union(in_location.package_set)
         else:
-            out_packages = set()
             for location in in_locations:
-                out_packages = out_packages.union(PackageHandler.get_location_packages(location))
-            return out_packages
+                if not location.is_hub:
+                    out_packages = out_packages.union(location.package_set)
+        if ignore_route:
+            for package in out_packages:
+                if package.location.been_routed:
+                    out_packages.remove(package)
+        return out_packages
 
     @staticmethod
     def get_closest_packages(origin_location: Location, minimum=1, ignore_delayed_locations=False,
-                             ignore_early_deadline_locations=False):
+                             ignore_early_deadline_locations=False, ignore_assigned=False):
         locations_distance_sorted = sorted(origin_location.distance_dict.items(), key=lambda item: item[1])
         closest_packages = set()
         if not origin_location.been_assigned:
             closest_packages = closest_packages.union(PackageHandler.get_location_packages(origin_location))
         for i in range(len(locations_distance_sorted)):
             next_closest_location = locations_distance_sorted[i][0]
-            if (
-                    ignore_early_deadline_locations and next_closest_location.earliest_deadline != config.DELIVERY_RETURN_TIME) or (
-                    ignore_delayed_locations and next_closest_location.latest_package_arrival != config.STANDARD_PACKAGE_ARRIVAL_TIME):
+            if (ignore_early_deadline_locations and next_closest_location.earliest_deadline != config.DELIVERY_RETURN_TIME) or (
+                    (ignore_delayed_locations and next_closest_location.latest_package_arrival != config.STANDARD_PACKAGE_ARRIVAL_TIME) or (
+                    (ignore_assigned and next_closest_location.been_assigned))):
                 continue
             if minimum <= len(closest_packages):
                 return closest_packages

@@ -18,7 +18,9 @@ class Package:
         self.status = DeliveryStatus.ON_ROUTE_TO_DEPOT
         self.special_note = special_note
         self.status_update_dict = dict()
+        self.bundled_package_set = set()
         self.assigned_truck_id = None
+        self.bundled_package_ids = None
         self.pending_update_time = None
         self.hub_arrival_time = None
         self.hub_departure_time = None

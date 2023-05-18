@@ -192,6 +192,7 @@ remaining capacity: {self._capacity - self._size}'''
     def set_clock(self, start_time: time):
         self._clock = start_time
 
+
     def distance(self, origin_location=None, target_location=None, to_hub=False):
         if not origin_location:
             origin_location = self.current_location

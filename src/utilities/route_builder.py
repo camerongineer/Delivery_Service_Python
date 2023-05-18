@@ -104,7 +104,23 @@ def _nearest_neighbors(truck: Truck, in_location_package_dict: dict):
     return None
 
 
-def _two_opt(truck: Truck):
+# def _two_opt(truck: Truck):
+#     valid_options = dict()
+#     for first_location, first_distance in truck.current_location.distance_dict.items():
+#         if not _is_valid_option(truck, first_location):
+#             continue
+#         for second_location, second_distance in truck.current_location.distance_dict.items():
+#             if _is_valid_option(truck, second_location, first_location):
+#                 miles_to_second = (truck.distance(target_location=first_location) +
+#                                    first_location.distance_dict[second_location])
+#                 first_location_package_total = len(PackageHandler.get_location_packages(first_location))
+#                 second_location_package_total = len(PackageHandler.get_location_packages(second_location))
+#                 if len(truck) + first_location_package_total + second_location_package_total >= config.NUM_TRUCK_CAPACITY * .6:
+#                     miles_to_second += second_location.distance_dict[truck.hub_location]
+#                 valid_options[first_location] = (miles_to_second, second_location)
+#     return _best_option(truck, valid_options)
+
+def _two_opt(truck: Truck, route_run_locations: Set[Location], is_return_run: bool, is_early_return_run: bool):
     valid_options = dict()
     for first_location, first_distance in truck.current_location.distance_dict.items():
         if not _is_valid_option(truck, first_location):
@@ -421,24 +437,16 @@ class RouteBuilder:
         next_truck_location = _two_opt(truck, route_run_locations, is_return_run, is_early_return_run)
         while next_truck_location is not Truck.hub_location:
             truck.next_location = next_truck_location
-            if _should_return_to_hub(truck, len(next_package_set), total_packages):
-                if _should_pause_for_delayed_packages(truck):
-                    _return_to_hub(truck, pause_end_at_hub=time(hour=9, minute=5))
-                else:
-                    _return_to_hub(truck, pause_end_at_hub=time(hour=9, minute=5))
-                truck.unload()
-                print('\nReturned to hub to reload')
+            if _should_return_to_hub(truck, route_run_locations, is_return_run, is_early_return_run):
                 PackageHandler.bulk_status_update(truck.clock)
-                next_truck_location = _two_opt(truck, route_run_locations, is_return_run, is_early_return_run)
+                next_truck_location = Truck.hub_location
                 continue
             truck.record()
-            _should_pause_for_delayed_packages(truck)
-            truck.add_all_packages(next_package_set)
+            truck.add_all_packages(PackageHandler.get_location_packages(next_truck_location))
             _travel_to_next_location(truck)
             PackageHandler.bulk_status_update(truck.clock)
-            # next_package_set = _nearest_neighbors(truck, in_location_package_dict)
             next_truck_location = _two_opt(truck)
-        truck.completion_time = truck.clock
+        return truck.clock
 
     # @staticmethod
     # def get_optimized_route(truck: Truck, in_location_package_dict: dict = PackageHandler.all_packages,
