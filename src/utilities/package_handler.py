@@ -198,12 +198,11 @@ class PackageHandler:
         return deadline_packages
 
     @staticmethod
-    def get_assigned_truck_packages(truck_id: int, packages=all_packages):
-        truck_map = PackageHandler.get_special_note_bundles('Can only be on truck ', packages)
+    def get_assigned_truck_packages(truck_id: int = None, packages=all_packages):
         truck_packages = set()
         for package in packages:
-            if package.package_id in truck_map.keys():
-                if truck_map[package.package_id].pop() == truck_id:
+            if package.assigned_truck_id:
+                if not truck_id or truck_id == package.assigned_truck_id:
                     truck_packages.add(package)
         return truck_packages
 

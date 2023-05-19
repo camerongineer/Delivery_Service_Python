@@ -1,6 +1,7 @@
 from copy import copy
 from datetime import time
 from unittest import TestCase
+from unittest.mock import patch
 
 from src import config
 from src.models.route_run import RouteRun
@@ -21,6 +22,7 @@ def _get_packages_by_id(list_of_ids):
 
 
 class TestRunPlanner(TestCase):
+
     def setUp(self) -> None:
         self.locations = PackageHandler.all_locations
         self.packages = PackageHandler.all_packages
@@ -31,7 +33,7 @@ class TestRunPlanner(TestCase):
         package_locations = PackageHandler.get_package_locations(early_return_packages)
         target_package = self.package_hash.get_package(15)
         target_location = target_package.location
-        early_return_run = RunPlanner.build(target_location, return_to_hub=True, focused_run=True)
+        early_return_run = RunPlanner.build(target_location, return_to_hub=True, focused_run=True, assigned_truck_id=1)
 
         assert len(early_return_run.ordered_route) == 4
         assert target_location in early_return_run.ordered_route
@@ -51,17 +53,30 @@ class TestRunPlanner(TestCase):
         assert not early_return_run
 
     def test_furthest_from_hub_location_run_build(self):
-        RunPlanner.build(self.package_hash.get_package(15).location, return_to_hub=True, focused_run=True)
-        package_ids = [11, 18, 32, 31, 24, 23, 25, 26, 36, 6, 17]
-        furthest_packages = _get_packages_by_id(package_ids)
-        furthest_locations = PackageHandler.get_package_locations(furthest_packages)
-        furthest_location = self.package_hash.get_package(11).location
-        furthest_location_run = RunPlanner.build(furthest_location, return_to_hub=True, focused_run=False, ignore_delayed_locations=True)
-        print(furthest_location_run.get_estimated_mileage_at_location(furthest_location))
-        print(furthest_location_run.get_estimated_time_at_location(furthest_location))
-        furthest_location = self.package_hash.get_package(22).location
-        furthest_location_run = RunPlanner.build(furthest_location, return_to_hub=False, focused_run=False,
-                                                 ignore_delayed_locations=True, start_time=time(9, 5))
+        package_count = 0
+        estimate_mileage = 0
+        furthest_location_run = RunPlanner.build(self.package_hash.get_package(15).location, return_to_hub=False, focused_run=False, assigned_truck_id=1)
+        # package_count += furthest_location_run.package_total()
+        # estimate_mileage += furthest_location_run.estimated_mileage
+        # package_ids = [11, 18, 32, 31, 24, 23, 25, 26, 36, 6, 17]
+        # furthest_packages = _get_packages_by_id(package_ids)
+        # furthest_locations = PackageHandler.get_package_locations(furthest_packages)
+        # furthest_location = self.package_hash.get_package(11).location
+        # furthest_location_run = RunPlanner.build(furthest_location, return_to_hub=True, focused_run=False, ignore_delayed_locations=True)
+        # package_count += furthest_location_run.package_total()
+        # estimate_mileage += furthest_location_run.estimated_mileage
+        # print(furthest_location_run.get_estimated_mileage_at_location(furthest_location))
+        # print(furthest_location_run.get_estimated_time_at_location(furthest_location))
+        # furthest_location = self.package_hash.get_package(3).location
+        # furthest_location_run = RunPlanner.build(furthest_location, return_to_hub=False, focused_run=False,
+        #                                          ignore_delayed_locations=True, start_time=time(9, 21), assigned_truck_id=2)
+        # package_count += furthest_location_run.package_total()
+        # estimate_mileage += furthest_location_run.estimated_mileage
+        # furthest_location = self.package_hash.get_package(22).location
+        # furthest_location_run = RunPlanner.build(furthest_location, return_to_hub=False, focused_run=False,
+        #                                          ignore_delayed_locations=True, start_time=time(9, 5), assigned_truck_id=1)
+        # package_count += furthest_location_run.package_total()
+        # estimate_mileage += furthest_location_run.estimated_mileage
         for location in furthest_location_run.ordered_route:
             print(location)
         for package in furthest_location_run.required_packages:
@@ -74,3 +89,8 @@ class TestRunPlanner(TestCase):
         print(furthest_location_run.estimated_mileage)
         print(furthest_location_run.package_total())
         print(furthest_location_run.estimated_completion_time)
+
+        print(package_count)
+        print(estimate_mileage)
+        print(PackageHandler.get_available_packages(current_time=time(10), ignore_assigned=True))
+        print(len(PackageHandler.get_available_packages(current_time=time(10), ignore_assigned=True)))
