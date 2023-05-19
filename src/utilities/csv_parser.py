@@ -40,6 +40,7 @@ def _set_assigned_truck(package: Package):
         match = re.findall(pattern, package.special_note).pop()
         package.assigned_truck_id = int(match)
         package.location.has_required_truck_package = True
+        package.location.assigned_truck = package.assigned_truck_id
 
 
 def _set_earliest_location_deadline(location: Location, in_deadline_time: time):

@@ -215,10 +215,20 @@ class TestPackageHandler(TestCase):
         for package_id in required_delayed_location_package_ids:
             assert self.custom_hash.get_package(package_id) in all_packages_at_delayed_package_locations
 
+    def test_get_available_packages(self):
+        available_packages = PackageHandler.get_available_packages(current_time=time(8))
+        delayed_package_ids = [6, 25, 28, 32]
+        assert len(PackageHandler.all_packages) == len(available_packages) + len(delayed_package_ids)
+        for package in available_packages:
+            assert package.package_id not in delayed_package_ids
+        assigned_location = list(self.packages)[0].location
+        assigned_location.been_assigned = True
+        available_packages = PackageHandler.get_available_packages(current_time=time(8), ignore_assigned=True)
+        for package in available_packages:
+            assert package.location is not assigned_location
+
     def test_get_current_location(self):
         self.truck_1.previous_location = self.locations[0]
         for package in self.packages:
             pass
 
-    def test_subtract_package_set(self):
-        pass

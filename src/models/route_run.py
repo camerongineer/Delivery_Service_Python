@@ -1,26 +1,52 @@
+from datetime import time
+from typing import Set, List
+
+from src import config
+from src.exceptions.route_builder_error import InvalidRouteRunError
+from src.models.location import Location
+from src.models.package import Package
 from src.models.truck import Truck
+from src.utilities.package_handler import PackageHandler
+from src.utilities.time_conversion import TimeConversion
 
 
 class RouteRun:
 
-    def __init__(self, return_to_hub: bool):
-        self.focused_run = None
-        self.ordered_route: list = []
-        self.required_packages = set()
-        self._return_to_hub = return_to_hub
-        self._estimated_mileage = 0
-        self.locations = set()
-        self.start_location = None
+    def __init__(self, return_to_hub: bool, start_time: time = config.DELIVERY_DISPATCH_TIME):
+        self._start_time: time = start_time
+        self._estimated_completion_time = None
+        self.ordered_route: List[Location] = []
+        self.required_packages: Set[Package] = set()
+        self._return_to_hub: bool = return_to_hub
+        self._estimated_mileage: float = 0
+        self._locations: Set[Location] = set()
         self._target_location = None
         self._assigned_truck_id = None
+        self._ignore_delayed_locations = None
+        self._ignore_bundle_locations = None
+        self.focused_run = None
+
+
 
     @property
     def return_to_hub(self):
         return self._return_to_hub
 
     @property
+    def locations(self):
+        return self._locations
+
+    @property
     def estimated_mileage(self):
         return self._estimated_mileage
+
+    @property
+    def estimated_completion_time(self):
+        return self._estimated_completion_time
+
+    @property
+    def start_time(self):
+        return self._start_time
 
     @property
     def target_location(self):
@@ -30,6 +56,18 @@ class RouteRun:
     def assigned_truck_id(self):
         return self._assigned_truck_id
 
+    @property
+    def ignore_delayed_locations(self):
+        return self._ignore_delayed_locations
+
+    @property
+    def ignore_bundle_locations(self):
+        return self._ignore_bundle_locations
+
+    @locations.setter
+    def locations(self, value: Set[Location]):
+        self._locations = value
+
     @target_location.setter
     def target_location(self, value: bool):
         self._target_location = value
@@ -38,25 +76,82 @@ class RouteRun:
     def assigned_truck_id(self, value: int):
         self._assigned_truck_id = value
 
+    @start_time.setter
+    def start_time(self, value: time):
+        self._start_time = value
+
+    @ignore_delayed_locations.setter
+    def ignore_delayed_locations(self, value: bool):
+        self._ignore_delayed_locations = value
+
+    @ignore_bundle_locations.setter
+    def ignore_bundle_locations(self, value: bool):
+        self._ignore_bundle_locations = value
+
     def package_total(self):
-        return len(self.required_packages)
+        total = 0
+        for location in self.ordered_route:
+            if location.is_hub:
+                continue
+            total += len(location.package_set)
+        return total
 
     def set_estimated_mileage(self):
-        mileage = self.start_location.distance(self.ordered_route[0])
+        mileage = self.ordered_route[0].distance(self.ordered_route[1])
         for i in range(1, len(self.ordered_route)):
             mileage += self.ordered_route[i - 1].distance(self.ordered_route[i])
-        if self.return_to_hub:
-            mileage += self.ordered_route[len(self.ordered_route) - 1].distance(Truck.hub_location)
         self._estimated_mileage = mileage
+
+    def set_estimated_completion_time(self):
+        self._estimated_completion_time = TimeConversion.convert_miles_to_time(self._estimated_mileage, self._start_time, pause_seconds=0)
+
+    def set_assigned_truck_id(self):
+        for location in self.ordered_route:
+            if location.is_hub:
+                continue
+            for package in location.package_set:
+                if package.assigned_truck_id and not self.assigned_truck_id:
+                    self.assigned_truck_id = package.assigned_truck_id
+                elif (package.assigned_truck_id and self.assigned_truck_id and
+                      package.assigned_truck_id != self.assigned_truck_id):
+                    raise InvalidRouteRunError
+
+    def set_required_packages(self):
+        for location in self.locations:
+            if location.is_hub:
+                continue
+            self.required_packages.update(location.package_set)
+        for package in PackageHandler.get_bundled_packages(ignore_assigned=False):
+            if package in self.required_packages:
+                self.required_packages.update(PackageHandler.get_bundled_packages(ignore_assigned=True))
+
+    def get_estimated_mileage_at_location(self, target_location):
+        mileage = 0
+        for i in range(1, len(self.ordered_route)):
+            previous_location = self.ordered_route[i - 1]
+            next_location = self.ordered_route[i]
+            miles_to_next = previous_location.distance(next_location)
+            if next_location is target_location:
+                return mileage + miles_to_next
+            else:
+                mileage += miles_to_next
+        return mileage + target_location.distance(self.ordered_route[-1])
+
+    def get_estimated_time_at_location(self, target_location):
+        mileage = self.get_estimated_mileage_at_location(target_location)
+        return TimeConversion.convert_miles_to_time(mileage, start_time=self.start_time, pause_seconds=0)
 
     def assigned_truck_location_total(self):
         return len([location for location in self.ordered_route if location.has_required_truck_package])
 
     def delayed_location_total(self):
-        return len([location for location in self.ordered_route if location.has_delayed_package_locations()])
+        return len([location for location in self.ordered_route if location.has_delayed_packages()])
 
     def bundled_location_total(self):
         return len([location for location in self.ordered_route if location.has_bundled_package])
+
+    def early_deadline_total(self):
+        return len([location for location in self.ordered_route if location.has_early_deadline()])
 
     def unconfirmed_location_total(self):
         return len([location for location in self.ordered_route if location.has_unconfirmed_package])

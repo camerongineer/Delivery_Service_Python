@@ -44,3 +44,10 @@ class InvalidRouteRunError(RouteBuilderError):
 
     def __init__(self):
         super().__init__(message=f'This route plan results in route run with 2 different assigned trucks')
+
+
+class BundledPackageTruckAssignmentError(RouteBuilderError):
+    """Raised when bundled packages and locations are not given an assigned truck once any of them are assigned"""
+
+    def __init__(self):
+        super().__init__(message=f'This Route Run must be assigned at truck id does not assign all bundled packages to the same truck if any are assigned')

@@ -54,10 +54,6 @@ class PackageHandler:
             return True
 
     @staticmethod
-    def get_run_package_total(ordered_run_list: List[Location]):
-        pass
-
-    @staticmethod
     def update_delivery_location(locations_list: List[Location], package: Package, updated_address: str):
         try:
             address, city, state_zip = updated_address.split(', ')
@@ -272,7 +268,7 @@ class PackageHandler:
         locations_distance_sorted = sorted(origin_location.distance_dict.items(), key=lambda item: item[1])
         closest_packages = set()
         if not origin_location.been_assigned:
-            closest_packages = closest_packages.union(PackageHandler.get_location_packages(origin_location))
+            closest_packages.update(origin_location.package_set)
         for i in range(len(locations_distance_sorted)):
             next_closest_location = locations_distance_sorted[i][0]
             if (ignore_early_deadline_locations and next_closest_location.earliest_deadline != config.DELIVERY_RETURN_TIME) or (
@@ -295,3 +291,13 @@ class PackageHandler:
             if package.assigned_truck_id:
                 truck_id = package.assigned_truck_id
         return truck_id
+
+    @staticmethod
+    def get_available_packages(current_time: time, in_packages=all_packages, ignore_assigned=False) -> Set[Package]:
+        available_packages = set()
+        for package in in_packages:
+            if package.location.been_assigned and ignore_assigned:
+                continue
+            if TimeConversion.is_time_at_or_before_other_time(package.hub_arrival_time, current_time):
+                available_packages.add(package)
+        return available_packages

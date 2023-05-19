@@ -30,7 +30,7 @@ class Package:
         return hash(self.package_id)
 
     def __repr__(self):
-        return f"Package(package_id={self.package_id}, is_verified_address={self.is_verified_address}," \
+        return f"Package(package_id={self.package_id}, Location: {self.location.name} - {self.location.address} - is_verified_address={self.is_verified_address}," \
                f" deadline=datetime.strptime('{self.deadline}', '%I:%M:%S'), weight={self.weight}," \
                f" status={self.status}, special_note='{self.special_note}')"
 

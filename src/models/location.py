@@ -20,6 +20,7 @@ class Location:
         self.been_visited = False
         self.been_assigned = False
         self.been_routed = False
+        self.assigned_truck = None
         self.earliest_deadline = DELIVERY_RETURN_TIME
         self.latest_package_arrival = None
         self.has_required_truck_package = False
@@ -38,7 +39,7 @@ class Location:
         return item in self.package_set
 
     def __repr__(self):
-        return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub} zip_code={self.zip_code})"
+        return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub} zip_code={self.zip_code}, been_assigned={self.been_assigned})"
 
     def set_city(self, city: UtahCity):
         self.city = city
@@ -56,14 +57,24 @@ class Location:
         self.earliest_deadline = deadline
 
     def has_close_deadline(self, current_time, time_delta=1800):
+        if not self.earliest_deadline:
+            return False
         return TimeConversion.is_time_at_or_before_other_time(self.earliest_deadline,
                                                               TimeConversion.add_time_delta(current_time, time_delta))
 
-    def has_delayed_package_locations(self):
-        return not TimeConversion.is_time_at_or_before_other_time(self.latest_package_arrival,
-                                                                  config.STANDARD_PACKAGE_ARRIVAL_TIME)
+    def has_delayed_packages(self):
+        if not self.latest_package_arrival:
+            return False
+        return self.latest_package_arrival != config.STANDARD_PACKAGE_ARRIVAL_TIME
+
+    def has_early_deadline(self):
+        if not self.earliest_deadline:
+            return False
+        return self.earliest_deadline != config.DELIVERY_RETURN_TIME
 
     def package_total(self):
+        if not self.package_set:
+            return 0
         return len(self.package_set)
 
     def distance(self, other_location):
