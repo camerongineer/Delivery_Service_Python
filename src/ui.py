@@ -8,10 +8,19 @@ from src.constants.color import Color
 
 class UI:
 
+    ITALIC = '\033[3m'
+    UNDERLINE = '\033[4m'
+
     @staticmethod
     def print(output: str, sleep_seconds: float = 0, color: Color = None, think=False, extra_lines=0):
+        if not config.UI_ELEMENTS_ENABLED:
+            color = None
+            sleep_seconds = 0
+            think = False
         if color:
             output = color.value[0] + output
+        if think:
+            output = UI.ITALIC + output
         print(output, end='' if think else '\n')
         sleep(sleep_seconds / (config.UI_SPEED / 100))
         if think:
@@ -24,7 +33,7 @@ class UI:
 
     @staticmethod
     def press_enter_to_continue():
-        print('Press Enter key to continue...\n\n')
-        input()
-        os.system('cls' if os.name == 'nt' else 'clear')
+        if config.UI_ELEMENTS_ENABLED:
+            input('\n\nPress Enter key to continue...')
+            print('\n\n')
 

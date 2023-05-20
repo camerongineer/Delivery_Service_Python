@@ -507,7 +507,9 @@
 #                 print('delays_stops:', delayed_stops)
 #                 print('early_deadlines:', early_deadlines)
 #         return runs
-from typing import List
+import random
+from copy import copy
+from typing import List, Set
 
 from src import config
 from src.constants.color import Color
@@ -515,6 +517,7 @@ from src.models.location import Location
 from src.models.route_run import RouteRun
 from src.models.truck import Truck
 from src.utilities.package_handler import PackageHandler
+from src.utilities.run_planner import RunPlanner
 from src.utilities.time_conversion import TimeConversion
 from src.ui import UI
 
@@ -574,6 +577,7 @@ def _calculate_best_targets() -> List[Location]:
     best_targets.append(opposite_from_furthest_location)
     if best_targets:
         UI.print(f'{len(best_targets)} viable targets found.', 5, color=Color.GREEN, extra_lines=1)
+        UI.press_enter_to_continue()
         return best_targets
     else:
         UI.print('No viable targets found.', 5, color=Color.RED, extra_lines=1)
@@ -581,47 +585,83 @@ def _calculate_best_targets() -> List[Location]:
 
 
 def _analyze_target_location(index_number: int, target_location: Location):
-    bundle_packages = False
-    early_deadline = False
-    assigned_truck = False
     UI.print(f'Analyzing target number {index_number + 1} - "{target_location.name}"', color=Color.YELLOW, think=True)
     if target_location.has_early_deadline():
         UI.print(f'This location has packages due be delivered by {target_location.earliest_deadline}',
                  color=Color.RED, think=True)
         UI.print('Prioritizing early route run', sleep_seconds=3)
         UI.print('Locations with delayed packages will be avoided', sleep_seconds=4, extra_lines=1)
-
-        early_deadline = True
     if target_location.has_bundled_package:
         UI.print('This location has packages that must be loaded together with packages from other locations'
                  , color=Color.RED, think=True)
         UI.print('Adding all of these locations to the run if possible, all packages must be loaded, and'
                  ' assigned a truck', sleep_seconds=4, extra_lines=1)
-        bundle_packages = True
-    if target_location.assigned_truck:
-        truck_number = target_location.assigned_truck
+    if target_location.assigned_truck_id:
+        truck_number = target_location.assigned_truck_id
         UI.print(f'This location is assigned to truck #{truck_number}', color=Color.RED, think=True)
         UI.print(f'All locations on this run must also be assigned to truck #{truck_number}', think=True, extra_lines=1)
-        assigned_truck = True
-        if bundle_packages:
+        if target_location.has_bundled_package:
             UI.print(f'Checking if bundled package locations match are required to be assigned to the same truck',
                      think=True)
             if not (PackageHandler.get_bundled_packages(all_location_packages=True)
                     .intersection(PackageHandler.get_assigned_truck_packages())):
-                UI.print('No conflicts.', sleep_seconds=4, color=Color.GREEN)
-    return bundle_packages, early_deadline, assigned_truck
+                UI.print('No conflicts detected.', sleep_seconds=4, color=Color.GREEN)
 
 
-def _create_optimized_runs(targets: List[Location]) -> List[RouteRun]:
-    analysis_dict = dict()
+def _analyze_route_run(index_number: int, run: RouteRun):
+    UI.print(f'Run #{index_number + 1} successfully built!', sleep_seconds=3, extra_lines=1)
+    UI.print(f'Analysing run #{index_number + 1} with target location: "{run.target_location.name}"',
+             think=True, extra_lines=1)
+
+
+def _initialize_trucks(required_truck_ids: Set[int], number_of_delivery_trucks=config.NUM_DELIVERY_TRUCKS):
+    available_trucks: Set[Truck] = {Truck(truck_id) for truck_id in range(1, number_of_delivery_trucks + 1)}
+    unavailable_trucks = set()
+    for truck_id in required_truck_ids:
+        for truck in copy(available_trucks):
+            if truck_id == truck.truck_id:
+                truck.has_assigned_packages = True
+                unavailable_trucks.add(truck)
+                available_trucks.remove(truck)
+    return available_trucks, unavailable_trucks
+
+
+def _select_truck_for_run(target_location: Location, available_truck_pool: Set[Truck],
+                          unavailable_truck_pool: Set[Truck]) -> Truck:
+    truck = None
+    for available_truck in copy(available_truck_pool):
+        if target_location.has_required_truck_package:
+            if target_location.assigned_truck_id and available_truck.truck_id == target_location.assigned_truck_id:
+                truck = available_truck
+        else:
+            truck = random.choice(list(available_truck_pool))
+            break
+    # available_truck_pool.remove(truck)
+    # unavailable_truck_pool.add(truck)
+    if not truck:
+        if target_location.assigned_truck_id and unavailable_truck_pool:
+            for unavailable_truck in unavailable_truck_pool:
+                if unavailable_truck.truck_id == target_location.assigned_truck_id:
+                    truck = unavailable_truck
+    return truck
+
+
+def _create_optimized_runs(targets: List[Location]) -> Set[Truck]:
+    required_truck_ids = set([target.assigned_truck_id for target in targets if target.has_required_truck_package])
+    UI.print('Finding available delivery trucks', think=True, color=Color.YELLOW)
+    available_truck_pool, unavailable_truck_pool = _initialize_trucks(required_truck_ids)
+    UI.print(f'{len(available_truck_pool)} trucks found', sleep_seconds=4, extra_lines=1)
     for i, target_location in enumerate(targets):
-        has_bundle_packages, has_early_deadline, has_assigned_truck = _analyze_target_location(i, target_location)
-        analysis_dict[target_location] = (has_bundle_packages, has_early_deadline, has_assigned_truck)
+        _analyze_target_location(i, target_location)
+        truck = _select_truck_for_run(target_location, available_truck_pool, unavailable_truck_pool)
+        route_run = RunPlanner.build(target_location, truck)
+        _analyze_route_run(i, route_run)
+    UI.press_enter_to_continue()
+    return available_truck_pool.union(unavailable_truck_pool)
 
 
 class RouteBuilder:
     @staticmethod
     def build_optimized_runs():
         best_targets = _calculate_best_targets()
-        UI.press_enter_to_continue()
-        optimized_runs = _create_optimized_runs(best_targets)
+        assigned_trucks = _create_optimized_runs(best_targets)

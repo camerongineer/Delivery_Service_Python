@@ -14,15 +14,15 @@ from src.utilities.time_conversion import TimeConversion
 
 def _is_valid_fill_in(run: RouteRun, fill_in: Location):
     has_different_truck = any(
-        _location for _location in run.ordered_route if _location.assigned_truck != fill_in.assigned_truck)
+        _location for _location in run.ordered_route if _location.assigned_truck_id != fill_in.assigned_truck_id)
     available_location_pool = _get_available_locations(run.start_time)
     if (fill_in.is_hub or (
             _get_estimated_required_package_total(run.ordered_route + [fill_in]) > config.NUM_TRUCK_CAPACITY)
             or fill_in in run.ordered_route or (run.ignore_delayed_locations and fill_in.has_delayed_packages()) or
             (not any(
                 [location.has_bundled_package for location in run.ordered_route]) and fill_in.has_bundled_package) or
-            (fill_in.assigned_truck and run.assigned_truck_id and fill_in.assigned_truck != run.assigned_truck_id) or
-            (has_different_truck and fill_in.assigned_truck) or fill_in not in available_location_pool or
+            (fill_in.assigned_truck_id and run.assigned_truck_id and fill_in.assigned_truck_id != run.assigned_truck_id) or
+            (has_different_truck and fill_in.assigned_truck_id) or fill_in not in available_location_pool or
             _in_close_proximity_to_locations(fill_in, _get_delayed_locations(run), distance=.75) or
             _in_close_proximity_to_locations(fill_in, _get_assigned_truck_locations(run), distance=.75) or
             _in_close_proximity_to_locations(fill_in, _get_unconfirmed_locations(run), distance=2.9)
@@ -74,7 +74,7 @@ def _combine_closest_packages(run: RouteRun, closest_location: Location, next_cl
     combine_packages_copy = copy(combine_packages)
     for package in combine_packages_copy:
         if (package.location not in _get_available_locations(current_time=run.start_time, ignore_assigned=True) or
-                (package.location.assigned_truck and package.assigned_truck_id != run.assigned_truck_id)):
+                (package.location.assigned_truck_id and package.assigned_truck_id != run.assigned_truck_id)):
             combine_packages.remove(package)
     return combine_packages
 
@@ -111,7 +111,7 @@ def _best_closest_location(run, location: Location, closest_locations: Set[Locat
             best_closest_location = location
         elif mileage == best_mileage:
             if ((location.has_required_truck_package and run.assigned_truck_id) and
-                    (location.assigned_truck == run.assigned_truck_id)):
+                    (location.assigned_truck_id == run.assigned_truck_id)):
                 best_closest_location = location
         else:
             break
@@ -189,7 +189,7 @@ def _is_valid_option(run, location: Location, other_location=None) -> bool:
     available_location_pool = _get_available_locations(run.start_time)
     if (location not in run.locations or (location in run.ordered_route) or location is other_location or
             location.is_hub or (
-                    location.assigned_truck and run.assigned_truck_id and location.assigned_truck != run.assigned_truck_id) or
+                    location.assigned_truck_id and run.assigned_truck_id and location.assigned_truck_id != run.assigned_truck_id) or
             location not in available_location_pool or
             _in_close_proximity_to_locations(location, _get_delayed_locations(run)) or
             _in_close_proximity_to_locations(location, _get_assigned_truck_locations(run))
@@ -272,6 +272,8 @@ def _set_locations_as_assigned(run: RouteRun):
             if location.has_bundled_package:
                 _set_assigned_truck_id_to_bundle_packages(run)
             location.been_assigned = True
+            for package in location.package_set:
+                package.assigned_truck_id = run.assigned_truck_id
 
 
 def _set_assigned_truck_id_to_bundle_packages(run):
@@ -279,17 +281,16 @@ def _set_assigned_truck_id_to_bundle_packages(run):
         if not run.assigned_truck_id:
             raise BundledPackageTruckAssignmentError
     except BundledPackageTruckAssignmentError:
-        print('Please give the run a truck ID')
-        truck_id = int(input())
+        truck_id = 1
         run.assigned_truck_id = truck_id
     for location in run.ordered_route:
         if location.has_bundled_package:
-            if location.assigned_truck and location.assigned_truck != run.assigned_truck_id:
+            if location.assigned_truck_id and location.assigned_truck_id != run.assigned_truck_id:
                 raise InvalidRouteRunError
             for package in location.package_set:
                 package.assigned_truck_id = run.assigned_truck_id
                 for bundle_package in package.bundled_package_set:
-                    bundle_package.location.assigned_truck = run.assigned_truck_id
+                    bundle_package.location.assigned_truck_id = run.assigned_truck_id
                     bundle_package.assigned_truck_id = run.assigned_truck_id
 
 
@@ -318,16 +319,13 @@ def _get_estimated_required_package_total(ordered_route_with_new_locations):
 class RunPlanner:
 
     @staticmethod
-    def build(target_location: Location, return_to_hub=True, focused_run=False,
-              ignore_delayed_locations=False, start_time=config.DELIVERY_DISPATCH_TIME, assigned_truck_id=None):
+    def build(target_location: Location, truck: Truck):
         if target_location.been_assigned or target_location.is_hub:
             return None
-        run = RouteRun(return_to_hub=return_to_hub, start_time=start_time)
-        run.focused_run = focused_run
-        run.ignore_delayed_locations = ignore_delayed_locations
+        run = RouteRun()
         run.target_location = target_location
+        run.assigned_truck_id = truck.truck_id
         run.ordered_route = [Truck.hub_location]
-        run.assigned_truck_id = assigned_truck_id
         closest_neighbor, next_closest_neighbor = _get_closest_neighbors(run)
         _get_optimized_run(run, closest_neighbor, next_closest_neighbor)
         _set_locations_as_assigned(run)
@@ -335,4 +333,5 @@ class RunPlanner:
         run.set_estimated_mileage()
         run.set_estimated_completion_time()
         run.set_assigned_truck_id()
+        truck.route_runs.append(run)
         return run

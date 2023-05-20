@@ -2,6 +2,8 @@ from datetime import time
 
 __all__ = ['Truck']
 
+from typing import List
+
 from src import config
 from src.models.location import Location
 from src.models.package import Package
@@ -20,6 +22,7 @@ class Truck(CustomHash):
         self._partner = None
         self._is_dispatched = False
         self._has_driver = False
+        self._has_assigned_packages = False
         self._dispatch_time = None
         self._completion_time = None
         self._previous_location = None
@@ -27,6 +30,7 @@ class Truck(CustomHash):
         self._next_location = None
         self._travel_ledger = dict()
         self._pause_ledger = dict()
+        self._route_runs = list()
 
     def __str__(self):
         return f'''
@@ -59,6 +63,10 @@ remaining capacity: {self._capacity - self._size}'''
         return self._has_driver
 
     @property
+    def has_assigned_packages(self):
+        return self._has_assigned_packages
+
+    @property
     def dispatch_time(self):
         return self._dispatch_time
 
@@ -82,6 +90,10 @@ remaining capacity: {self._capacity - self._size}'''
     def pause_ledger(self):
         return self._pause_ledger
 
+    @property
+    def route_runs(self):
+        return self._route_runs
+
     @partner.setter
     def partner(self, value):
         if type(value) == type(self) and value is not self:
@@ -99,11 +111,12 @@ remaining capacity: {self._capacity - self._size}'''
         self._completion_time = value
 
     @has_driver.setter
-    def has_driver(self, value):
-        if value:
-            self._has_driver = True
-        else:
-            self._has_driver = False
+    def has_driver(self, value: bool):
+        self._has_driver = value
+
+    @has_assigned_packages.setter
+    def has_assigned_packages(self, value: bool):
+        self._has_assigned_packages = value
 
     @previous_location.setter
     def previous_location(self, value: Location):
@@ -116,6 +129,7 @@ remaining capacity: {self._capacity - self._size}'''
     @next_location.setter
     def next_location(self, value: Location):
         self._next_location = value
+
 
     def add_package(self, package: Package):
         if self._size >= config.NUM_TRUCK_CAPACITY:

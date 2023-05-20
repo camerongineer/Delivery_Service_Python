@@ -20,7 +20,7 @@ class Location:
         self.been_visited = False
         self.been_assigned = False
         self.been_routed = False
-        self.assigned_truck = None
+        self.assigned_truck_id = None
         self.earliest_deadline = DELIVERY_RETURN_TIME
         self.latest_package_arrival = None
         self.has_required_truck_package = False

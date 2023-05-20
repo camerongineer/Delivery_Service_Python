@@ -5,28 +5,33 @@ from src import config
 from src.exceptions.route_builder_error import InvalidRouteRunError
 from src.models.location import Location
 from src.models.package import Package
-from src.models.truck import Truck
 from src.utilities.package_handler import PackageHandler
 from src.utilities.time_conversion import TimeConversion
 
 
 class RouteRun:
 
-    def __init__(self, return_to_hub: bool, start_time: time = config.DELIVERY_DISPATCH_TIME):
+    def __init__(self, return_to_hub: bool = False, start_time: time = config.DELIVERY_DISPATCH_TIME):
+        self._target_location = None
         self._start_time: time = start_time
         self._estimated_completion_time = None
-        self.ordered_route: List[Location] = []
-        self.required_packages: Set[Package] = set()
-        self._return_to_hub: bool = return_to_hub
         self._estimated_mileage: float = 0
+        self._ordered_route: List[Location] = []
+        self._required_packages: Set[Package] = set()
         self._locations: Set[Location] = set()
-        self._target_location = None
         self._assigned_truck_id = None
+        self._return_to_hub: bool = return_to_hub
         self._ignore_delayed_locations = None
         self._ignore_bundle_locations = None
         self.focused_run = None
 
+    @property
+    def ordered_route(self):
+        return self._ordered_route
 
+    @property
+    def required_packages(self):
+        return self._required_packages
 
     @property
     def return_to_hub(self):
@@ -64,12 +69,16 @@ class RouteRun:
     def ignore_bundle_locations(self):
         return self._ignore_bundle_locations
 
+    @ordered_route.setter
+    def ordered_route(self, value: Set[Location]):
+        self._ordered_route = value
+
     @locations.setter
     def locations(self, value: Set[Location]):
         self._locations = value
 
     @target_location.setter
-    def target_location(self, value: bool):
+    def target_location(self, value: Location):
         self._target_location = value
 
     @assigned_truck_id.setter
