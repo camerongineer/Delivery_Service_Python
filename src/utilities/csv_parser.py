@@ -116,6 +116,7 @@ def _set_bundled_packages(packages: List[Package]):
     for bundle_set in bundle_id_sets:
         for package in bundle_set:
             package.bundled_package_set = copy(bundle_set)
+            package.location.has_bundled_package = True
             package.bundled_package_set.remove(package)
 
 

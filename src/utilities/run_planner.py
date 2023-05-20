@@ -24,7 +24,9 @@ def _is_valid_fill_in(run: RouteRun, fill_in: Location):
             (fill_in.assigned_truck and run.assigned_truck_id and fill_in.assigned_truck != run.assigned_truck_id) or
             (has_different_truck and fill_in.assigned_truck) or fill_in not in available_location_pool or
             _in_close_proximity_to_locations(fill_in, _get_delayed_locations(run), distance=.75) or
-            _in_close_proximity_to_locations(fill_in, _get_assigned_truck_locations(run), distance=.75)
+            _in_close_proximity_to_locations(fill_in, _get_assigned_truck_locations(run), distance=.75) or
+            _in_close_proximity_to_locations(fill_in, _get_unconfirmed_locations(run), distance=2.9)
+
     ):
         return False
     return True
@@ -37,10 +39,10 @@ def _fill_in(run: RouteRun, allowable_extra_mileage=3.5):
     for i in range(1, len(run.ordered_route)):
         prior_location = run.ordered_route[i - 1]
         next_location = run.ordered_route[i]
+        current_distance = prior_location.distance(next_location)
         for fill_in in PackageHandler.all_locations:
             if not _is_valid_fill_in(run, fill_in):
                 continue
-            current_distance = prior_location.distance(next_location)
             total_distance = prior_location.distance(fill_in) + fill_in.distance(next_location)
             if total_distance <= (current_distance + allowable_extra_mileage):
                 if not best_fill_in or (total_distance - current_distance) < best_fill_in_mileage:
@@ -138,7 +140,7 @@ def _get_optimized_run(run: RouteRun, closest_location: Location, next_closest_l
         run.ordered_route.append(Truck.hub_location)
 
     fill_in_index, fill_in = _fill_in(run, allowable_extra_mileage=fill_in_max_mileage)
-    while fill_in:
+    while fill_in_index:
         run.ordered_route.insert(fill_in_index, fill_in)
         fill_in_index, fill_in = _fill_in(run, allowable_extra_mileage=fill_in_max_mileage)
 
@@ -221,12 +223,10 @@ def _get_delayed_locations(run: RouteRun):
     return delayed_locations.difference(_get_available_locations(run.start_time, ignore_assigned=True))
 
 
-def _in_close_proximity_of_delayed_location(run: RouteRun, in_location: Location) -> bool:
-    delayed_locations = _get_delayed_locations(run)
-    for location in delayed_locations:
-        if location is in_location or location.distance(in_location) < 1.75:
-            return True
-    return False
+def _get_unconfirmed_locations(run: RouteRun):
+    unconfirmed_packages = PackageHandler.get_unconfirmed_packages()
+    unconfirmed_locations = PackageHandler.get_package_locations(unconfirmed_packages)
+    return unconfirmed_locations.intersection(_get_available_locations(run.start_time, ignore_assigned=True))
 
 
 def _get_assigned_truck_locations(run: RouteRun):

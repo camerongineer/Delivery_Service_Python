@@ -300,3 +300,11 @@ class PackageHandler:
             if TimeConversion.is_time_at_or_before_other_time(package.hub_arrival_time, current_time):
                 available_packages.add(package)
         return available_packages
+
+    @staticmethod
+    def get_unconfirmed_packages(in_packages=all_packages):
+        unconfirmed_packages = set()
+        for package in in_packages:
+            if not package.is_verified_address:
+                unconfirmed_packages.add(package)
+        return unconfirmed_packages
