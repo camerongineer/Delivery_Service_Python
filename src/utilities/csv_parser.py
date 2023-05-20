@@ -132,7 +132,13 @@ class CsvParser:
                 location = Location(name.strip(), address)
                 if overflow:
                     *city_state, zip_code = overflow[0].split()
-                    location.set_zip_code(int(zip_code))
+                    city_state = ' '.join(city_state)
+                    city, *state = city_state.split(', ')
+                    for utah_city in UtahCity:
+                        if utah_city.displayed_name == city:
+                            location.city = utah_city
+                            break
+                    location.zip_code = int(zip_code)
                 locations.append(location)
 
             name_address_rows = []
@@ -180,10 +186,10 @@ class CsvParser:
                 for location in locations:
                     if location.address == address and location.zip_code == zip_code:
                         package_location = location
+                        package_location.city = city
                         break
                 if not package_location:
                     raise ImportError
-                package_location.set_city(city)
                 deadline = config.DELIVERY_RETURN_TIME if row['Delivery Deadline'] == 'EOD' else \
                     datetime.strptime(row['Delivery Deadline'], '%I:%M:%S %p').time()
                 weight = int(row['Mass KILO'])

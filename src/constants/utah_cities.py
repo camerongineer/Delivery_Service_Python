@@ -1,7 +1,6 @@
 from enum import Enum
 
 
-
 __all__ = ['UtahCity']
 
 from src.constants.states import State

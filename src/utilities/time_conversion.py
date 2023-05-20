@@ -29,9 +29,9 @@ class TimeConversion:
         return datetime.combine(config.DELIVERY_DATE, in_time)
 
     @staticmethod
-    def increment_time(in_time: time, time_interval=1):
+    def increment_time(in_time: time, time_seconds=1):
         in_datetime = TimeConversion.get_datetime(in_time)
-        in_datetime = in_datetime + timedelta(seconds=time_interval)
+        in_datetime = in_datetime + timedelta(seconds=time_seconds)
         return in_datetime.time()
 
     @staticmethod
@@ -56,3 +56,4 @@ class TimeConversion:
     @staticmethod
     def add_time_delta(start_time: time, time_seconds: int):
         return (TimeConversion.get_datetime(start_time) + timedelta(seconds=time_seconds)).time()
+

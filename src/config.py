@@ -2,6 +2,8 @@ from datetime import time, datetime
 
 from src.utilities.path_utils import PathUtils
 
+UI_SPEED = 300
+
 NUM_DRIVERS = 2
 NUM_DELIVERY_TRUCKS = 3
 NUM_TRUCK_CAPACITY = 16

@@ -12,8 +12,8 @@ class Location:
     def __init__(self, name: str, address: str, is_hub=False):
         self.name = name
         self.address = address
-        self.city = None
-        self.zip_code = None
+        self._city = None
+        self._zip_code = None
         self.distance_dict = dict()
         self.package_set = set()
         self.is_hub = is_hub
@@ -41,8 +41,21 @@ class Location:
     def __repr__(self):
         return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub} zip_code={self.zip_code}, been_assigned={self.been_assigned})"
 
-    def set_city(self, city: UtahCity):
-        self.city = city
+    @property
+    def city(self):
+        return self._city
+
+    @property
+    def zip_code(self):
+        return self._zip_code
+
+    @city.setter
+    def city(self, value: UtahCity):
+        self._city = value
+
+    @zip_code.setter
+    def zip_code(self, value: int):
+        self._zip_code = value
 
     def set_zip_code(self, zip_code: int):
         self.zip_code = zip_code
