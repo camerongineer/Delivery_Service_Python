@@ -2,7 +2,7 @@ from datetime import time, datetime
 
 from src.utilities.path_utils import PathUtils
 
-UI_ELEMENTS_ENABLED = False
+UI_ELEMENTS_ENABLED = True
 UI_SPEED = 300
 
 NUM_DRIVERS = 2

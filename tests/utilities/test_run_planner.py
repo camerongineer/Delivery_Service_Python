@@ -59,21 +59,23 @@ class TestRunPlanner(TestCase):
         run = RunPlanner.build(self.package_hash.get_package(15).location, truck1)
         focused_run = RunPlanner.build(self.package_hash.get_package(3).location, truck, start_time=time(9, 5), has_assigned_truck_focus=True)
 
-        furthest_location_run = RunPlanner.build(self.package_hash.get_package(22).location, truck, start_time=time(9, 5))
-        package_count = 0
-        estimate_mileage = 0
-        min_miles = 100
-        min_package = -1
-        for i in range(1, 41):
-            print(i)
-            furthest_location_run = RunPlanner.build(self.package_hash.get_package(i).location, truck, start_time=time(9, 5))
-            if furthest_location_run.estimated_mileage < min_miles and furthest_location_run.package_total() > 10:
-                min_miles = furthest_location_run.estimated_mileage
-                min_package = i
-            for package in PackageHandler.all_packages:
-                package.location.been_assigned = False
-        print(min_miles)
-        print(min_package)
+        furthest_location_run = RunPlanner.build(self.package_hash.get_package(22).location, truck1, start_time=time(9, 5))
+        print(run.estimated_mileage + focused_run.estimated_mileage + furthest_location_run.estimated_mileage)
+        # package_count = 0
+        # estimate_mileage = 0
+        # min_miles = 100
+        # min_package = -1
+        # for i in range(1, 41):
+        #     for package in PackageHandler.all_packages:
+        #         package.location.been_assigned = False
+        #
+        #     print(i)
+        #     furthest_location_run = RunPlanner.build(self.package_hash.get_package(i).location, truck, start_time=time(9, 5))
+        #     if furthest_location_run.estimated_mileage < min_miles and furthest_location_run.package_total() > 10:
+        #         min_miles = furthest_location_run.estimated_mileage
+        #         min_package = i
+        # print(min_miles)
+        # print(min_package)
         # package_count += furthest_location_run.package_total()
         # estimate_mileage += furthest_location_run.estimated_mileage
         # package_ids = [11, 18, 32, 31, 24, 23, 25, 26, 36, 6, 17]
@@ -95,20 +97,20 @@ class TestRunPlanner(TestCase):
         #                                          ignore_delayed_locations=True, start_time=time(9, 5), assigned_truck_id=2)
         # package_count += furthest_location_run.package_total()
         # estimate_mileage += furthest_location_run.estimated_mileage
-        for location in furthest_location_run.ordered_route:
-            print(location)
-        for package in furthest_location_run.required_packages:
-            print(package)
-        print(furthest_location_run.delayed_location_total())
-        print(furthest_location_run.assigned_truck_location_total())
-        print(furthest_location_run.unconfirmed_location_total())
-        print(furthest_location_run.bundled_location_total())
-        print(furthest_location_run.early_deadline_total())
-        print(furthest_location_run.estimated_mileage)
-        print(furthest_location_run.package_total())
-        print(furthest_location_run.estimated_completion_time)
-
-        print(package_count)
-        print(estimate_mileage)
-        print(PackageHandler.get_available_packages(current_time=time(10), ignore_assigned=True))
-        print(len(PackageHandler.get_available_packages(current_time=time(10), ignore_assigned=True)))
+        # for location in furthest_location_run.ordered_route:
+        #     print(location)
+        # for package in furthest_location_run.required_packages:
+        #     print(package)
+        # print(furthest_location_run.delayed_location_total())
+        # print(furthest_location_run.assigned_truck_location_total())
+        # print(furthest_location_run.unconfirmed_location_total())
+        # print(furthest_location_run.bundled_location_total())
+        # print(furthest_location_run.early_deadline_total())
+        # print(furthest_location_run.estimated_mileage)
+        # print(furthest_location_run.package_total())
+        # print(furthest_location_run.estimated_completion_time)
+        #
+        # print(package_count)
+        # print(estimate_mileage)
+        # print(PackageHandler.get_available_packages(current_time=time(10), ignore_assigned=True))
+        # print(len(PackageHandler.get_available_packages(current_time=time(10), ignore_assigned=True)))

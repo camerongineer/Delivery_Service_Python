@@ -15,6 +15,7 @@ class RouteRun:
         self._target_location = None
         self._start_time: time = start_time
         self._estimated_completion_time = None
+        self._requirements_met = None
         self._estimated_mileage: float = 0
         self._ordered_route: List[Location] = []
         self._required_packages: Set[Package] = set()
@@ -34,6 +35,10 @@ class RouteRun:
     @property
     def required_packages(self):
         return self._required_packages
+
+    @property
+    def requirements_met(self):
+        return self._requirements_met
 
     @property
     def return_to_hub(self):
@@ -82,6 +87,10 @@ class RouteRun:
     @ordered_route.setter
     def ordered_route(self, value: Set[Location]):
         self._ordered_route = value
+
+    @requirements_met.setter
+    def requirements_met(self, value: bool):
+        self._requirements_met = value
 
     @locations.setter
     def locations(self, value: Set[Location]):
