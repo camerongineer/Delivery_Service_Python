@@ -17,6 +17,7 @@ class Location:
         self.distance_dict = dict()
         self.package_set = set()
         self.is_hub = is_hub
+        self._hub_distance = None
         self.been_visited = False
         self.been_assigned = False
         self.been_routed = False
@@ -38,8 +39,14 @@ class Location:
     def __contains__(self, item):
         return item in self.package_set
 
+    def __lt__(self, other):
+        return self.hub_distance < other.hub_distance
+
+    def __gt__(self, other):
+        return self.hub_distance > other.hub_distance
+
     def __repr__(self):
-        return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub} zip_code={self.zip_code}, been_assigned={self.been_assigned})"
+        return f"Location(name='{self.name}', address='{self.address}', is_hub={self.is_hub}, hub_distance={self.hub_distance}, been_assigned={self.been_assigned}, earliest_deadline={self.earliest_deadline})"
 
     @property
     def city(self):
@@ -49,6 +56,10 @@ class Location:
     def zip_code(self):
         return self._zip_code
 
+    @property
+    def hub_distance(self):
+        return self._hub_distance
+
     @city.setter
     def city(self, value: UtahCity):
         self._city = value
@@ -56,6 +67,10 @@ class Location:
     @zip_code.setter
     def zip_code(self, value: int):
         self._zip_code = value
+
+    @hub_distance.setter
+    def hub_distance(self, value: float):
+        self._hub_distance = value
 
     def set_zip_code(self, zip_code: int):
         self.zip_code = zip_code

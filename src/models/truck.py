@@ -2,7 +2,7 @@ from datetime import time
 
 __all__ = ['Truck']
 
-from typing import List
+from typing import List, Set
 
 from src import config
 from src.models.location import Location
@@ -145,8 +145,13 @@ remaining capacity: {self._capacity - self._size}'''
             self._dispatch_time = current_time
             self._is_dispatched = True
 
-    def unload(self):
+    def unload(self) -> Set[Package]:
+        truck_packages = set()
+        for slot in self._arr:
+            for package in slot:
+                truck_packages.add(package)
         self.clear()
+        return truck_packages
 
     def record(self):
         self._travel_ledger[self.mileage] = \

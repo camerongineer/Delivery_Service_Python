@@ -12,7 +12,7 @@ class CustomHash:
 
     def __init__(self, capacity: int):
         self._capacity = capacity
-        self._arr: list = [[]] * capacity
+        self._arr: list = [[] for _ in range(capacity)]
         self._size = 0
 
     def __len__(self):
@@ -43,7 +43,7 @@ class CustomHash:
         return True
 
     def clear(self):
-        self._arr = [[]] * self._capacity
+        self._arr = [[] for _ in range(self._capacity)]
         self._size = 0
 
     @final

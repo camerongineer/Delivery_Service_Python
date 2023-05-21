@@ -240,10 +240,11 @@ class PackageHandler:
         return late_packages
 
     @staticmethod
-    def get_package_locations(in_packages: Set[Package]) -> Set[Location]:
+    def get_package_locations(in_packages: Set[Package], ignore_assigned=False) -> Set[Location]:
         locations = set()
         for package in in_packages:
-            locations.add(package.location)
+            if not ignore_assigned or not package.location.been_assigned:
+                locations.add(package.location)
         return locations
 
     @staticmethod

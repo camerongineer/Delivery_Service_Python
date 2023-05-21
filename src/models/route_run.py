@@ -23,7 +23,9 @@ class RouteRun:
         self._return_to_hub: bool = return_to_hub
         self._ignore_delayed_locations = None
         self._ignore_bundle_locations = None
-        self.focused_run = None
+        self._focused_run = None
+        self._has_assigned_truck_focus = None
+
 
     @property
     def ordered_route(self):
@@ -69,6 +71,14 @@ class RouteRun:
     def ignore_bundle_locations(self):
         return self._ignore_bundle_locations
 
+    @property
+    def focused_run(self):
+        return self._focused_run
+
+    @property
+    def has_assigned_truck_focus(self):
+        return self._has_assigned_truck_focus
+
     @ordered_route.setter
     def ordered_route(self, value: Set[Location]):
         self._ordered_route = value
@@ -97,13 +107,16 @@ class RouteRun:
     def ignore_bundle_locations(self, value: bool):
         self._ignore_bundle_locations = value
 
-    def package_total(self):
-        total = 0
-        for location in self.ordered_route:
-            if location.is_hub:
-                continue
-            total += len(location.package_set)
-        return total
+    @focused_run.setter
+    def focused_run(self, value: bool):
+        self._focused_run = value
+
+    @has_assigned_truck_focus.setter
+    def has_assigned_truck_focus(self, value: bool):
+        self._has_assigned_truck_focus = value
+
+    def package_total(self, alternate_locations: Set[Location] = None):
+        return len(self.get_all_packages(alternate_locations))
 
     def set_estimated_mileage(self):
         mileage = self.ordered_route[0].distance(self.ordered_route[1])
@@ -112,7 +125,8 @@ class RouteRun:
         self._estimated_mileage = mileage
 
     def set_estimated_completion_time(self):
-        self._estimated_completion_time = TimeConversion.convert_miles_to_time(self._estimated_mileage, self._start_time, pause_seconds=0)
+        self._estimated_completion_time = TimeConversion.convert_miles_to_time(self._estimated_mileage,
+                                                                               self._start_time, pause_seconds=0)
 
     def set_assigned_truck_id(self):
         for location in self.ordered_route:
@@ -133,6 +147,14 @@ class RouteRun:
         for package in PackageHandler.get_bundled_packages(ignore_assigned=False):
             if package in self.required_packages:
                 self.required_packages.update(PackageHandler.get_bundled_packages(ignore_assigned=True))
+
+    def get_all_packages(self, alternate_locations: Set[Location] = None):
+        all_packages = set()
+        for location in (alternate_locations if alternate_locations else self.locations):
+            if location.is_hub:
+                continue
+            all_packages.update(location.package_set)
+        return all_packages
 
     def get_estimated_mileage_at_location(self, target_location):
         mileage = 0
@@ -164,3 +186,7 @@ class RouteRun:
 
     def unconfirmed_location_total(self):
         return len([location for location in self.ordered_route if location.has_unconfirmed_package])
+
+    @required_packages.setter
+    def required_packages(self, value):
+        self._required_packages = value

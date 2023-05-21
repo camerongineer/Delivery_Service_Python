@@ -155,6 +155,7 @@ class CsvParser:
                 if str(address_zip_rows[i]).strip() == 'HUB':
                     locations[i].set_location_as_hub()
                     Truck.hub_location = locations[i]
+                    locations[i].hub_distance = 0
                 zip_match = re.search(r'\((\d+)\)', address_zip_rows[i])
                 if zip_match:
                     zip_code = int(zip_match.group(1))
@@ -169,6 +170,8 @@ class CsvParser:
                     distance_dict[locations[k]] = float(distances_rows[k][i])
 
                 locations[i].set_distance_dict(distance_dict)
+                if not locations[i].is_hub:
+                    locations[i].hub_distance = locations[i].distance_dict[Truck.hub_location]
         return locations
 
     @staticmethod

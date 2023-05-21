@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from src import config
 from src.models.route_run import RouteRun
+from src.models.truck import Truck
 from src.utilities.package_handler import PackageHandler
 from src.utilities.run_planner import RunPlanner
 
@@ -53,17 +54,24 @@ class TestRunPlanner(TestCase):
         assert not early_return_run
 
     def test_furthest_from_hub_location_run_build(self):
+        truck1 = Truck(1)
+        truck = Truck(2)
+        run = RunPlanner.build(self.package_hash.get_package(15).location, truck1)
+        focused_run = RunPlanner.build(self.package_hash.get_package(3).location, truck, start_time=time(9, 5), has_assigned_truck_focus=True)
+
+        furthest_location_run = RunPlanner.build(self.package_hash.get_package(22).location, truck, start_time=time(9, 5))
         package_count = 0
         estimate_mileage = 0
         min_miles = 100
         min_package = -1
         for i in range(1, 41):
-            furthest_location_run = RunPlanner.build(self.package_hash.get_package(i).location, return_to_hub=True, focused_run=False, assigned_truck_id=2, start_time=time(8, 47))
-            if furthest_location_run.estimated_mileage < min_miles:
+            print(i)
+            furthest_location_run = RunPlanner.build(self.package_hash.get_package(i).location, truck, start_time=time(9, 5))
+            if furthest_location_run.estimated_mileage < min_miles and furthest_location_run.package_total() > 10:
                 min_miles = furthest_location_run.estimated_mileage
                 min_package = i
-                for package in PackageHandler.all_packages:
-                    package.location.been_assigned = False
+            for package in PackageHandler.all_packages:
+                package.location.been_assigned = False
         print(min_miles)
         print(min_package)
         # package_count += furthest_location_run.package_total()
