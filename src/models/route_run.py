@@ -2,6 +2,7 @@ from datetime import time
 from typing import Set, List
 
 from src import config
+from src.constants.run_focus import RunFocus
 from src.exceptions.route_builder_error import InvalidRouteRunError
 from src.models.location import Location
 from src.models.package import Package
@@ -22,10 +23,8 @@ class RouteRun:
         self._locations: Set[Location] = set()
         self._assigned_truck_id = None
         self._return_to_hub: bool = return_to_hub
-        self._ignore_delayed_locations = None
-        self._ignore_bundle_locations = None
         self._focused_run = None
-        self._has_assigned_truck_focus = None
+        self._run_analysis_dict = None
 
 
     @property
@@ -69,20 +68,12 @@ class RouteRun:
         return self._assigned_truck_id
 
     @property
-    def ignore_delayed_locations(self):
-        return self._ignore_delayed_locations
-
-    @property
-    def ignore_bundle_locations(self):
-        return self._ignore_bundle_locations
-
-    @property
     def focused_run(self):
         return self._focused_run
 
     @property
-    def has_assigned_truck_focus(self):
-        return self._has_assigned_truck_focus
+    def run_analysis_dict(self):
+        return self._run_analysis_dict
 
     @ordered_route.setter
     def ordered_route(self, value: Set[Location]):
@@ -108,21 +99,13 @@ class RouteRun:
     def start_time(self, value: time):
         self._start_time = value
 
-    @ignore_delayed_locations.setter
-    def ignore_delayed_locations(self, value: bool):
-        self._ignore_delayed_locations = value
-
-    @ignore_bundle_locations.setter
-    def ignore_bundle_locations(self, value: bool):
-        self._ignore_bundle_locations = value
-
     @focused_run.setter
-    def focused_run(self, value: bool):
+    def focused_run(self, value: RunFocus):
         self._focused_run = value
 
-    @has_assigned_truck_focus.setter
-    def has_assigned_truck_focus(self, value: bool):
-        self._has_assigned_truck_focus = value
+    @run_analysis_dict.setter
+    def run_analysis_dict(self, value: dict):
+        self._run_analysis_dict = value
 
     def package_total(self, alternate_locations: Set[Location] = None):
         return len(self.get_all_packages(alternate_locations))
@@ -165,6 +148,10 @@ class RouteRun:
             all_packages.update(location.package_set)
         return all_packages
 
+    @required_packages.setter
+    def required_packages(self, value):
+        self._required_packages = value
+
     def get_estimated_mileage_at_location(self, target_location):
         mileage = 0
         for i in range(1, len(self.ordered_route)):
@@ -195,7 +182,3 @@ class RouteRun:
 
     def unconfirmed_location_total(self):
         return len([location for location in self.ordered_route if location.has_unconfirmed_package])
-
-    @required_packages.setter
-    def required_packages(self, value):
-        self._required_packages = value

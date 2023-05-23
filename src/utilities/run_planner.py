@@ -4,7 +4,9 @@ from typing import Set
 
 from src import config
 from src.constants.delivery_status import DeliveryStatus
-from src.exceptions.route_builder_error import BundledPackageTruckAssignmentError, InvalidRouteRunError
+from src.constants.run_focus import RunFocus
+from src.exceptions.route_builder_error import BundledPackageTruckAssignmentError, InvalidRouteRunError, \
+    OptimalHubReturnError, PackageNotArrivedError, UnconfirmedPackageDeliveryError, LateDeliveryError
 from src.models.location import Location
 from src.models.route_run import RouteRun
 from src.models.truck import Truck
@@ -114,18 +116,21 @@ def _best_closest_location(run, location: Location):
     return {best_mileage: best_closest_location} if best_mileage and best_closest_location else None
 
 
-def _get_focused_targets(run, minimum=8):
-    if run.has_assigned_truck_focus:
+def _get_focused_targets(run: RouteRun, minimum=8):
+    if run.focused_run is RunFocus.ASSIGNED_TRUCK:
         run.locations.add(run.target_location)
         run.locations.update(PackageHandler.get_package_locations(
             PackageHandler.get_assigned_truck_packages(truck_id=run.assigned_truck_id), ignore_assigned=True))
 
     if len(run.locations) < minimum and run.package_total() <= config.NUM_TRUCK_CAPACITY:
-        highest_sum_of_miles_sorted_locations = (sorted(run.locations, key=lambda _location:
-                                                 sum(_location.distance_dict.values())))
+        highest_sum_of_miles_sorted_locations = (sorted(run.locations, key=lambda _location: sum(_location.distance_dict.values())))
         if highest_sum_of_miles_sorted_locations:
             best_target = highest_sum_of_miles_sorted_locations.pop()
+            if best_target is run.target_location:
+                best_target = highest_sum_of_miles_sorted_locations.pop()
             next_best_target = highest_sum_of_miles_sorted_locations.pop()
+            if next_best_target is run.target_location:
+                next_best_target = highest_sum_of_miles_sorted_locations.pop()
             _combine_closest_locations(run, best_target, next_best_target, minimum)
 
 
@@ -362,7 +367,7 @@ def _get_available_locations(current_time: time, in_locations=PackageHandler.all
     for location in in_locations:
         if ignore_assigned and location.been_assigned or location.is_hub:
             continue
-        if TimeConversion.is_time_at_or_before_other_time(location.latest_package_arrival, current_time):
+        if _is_earlier_time(location.latest_package_arrival, current_time):
             available_locations.add(location)
     return available_locations
 
@@ -379,35 +384,76 @@ def _get_estimated_required_package_total(ordered_route_with_new_locations):
     return len(estimated_packages)
 
 
+def _is_earlier_time(first_time: time, second_time: time):
+    return TimeConversion.is_time_at_or_before_other_time(first_time, second_time)
+
+
 def _get_run_analysis_dict(run: RouteRun):
     run_analysis_dict = dict()
     packages_delivered = list()
     locations_visited = list()
+    requirements_met = True
+    minimum_optimal_start_time = None
+    latest_arrival_time = None
     for i, location in enumerate(run.ordered_route, start=0):
         if location.is_hub:
             continue
-        previous_location = run.ordered_route[i - 1]
-        packages_delivered += list(location.package_set)
+        error_type = None
         locations_visited.append(location)
-        hub_insert_distance = previous_location.hub_distance + location.hub_distance
+        previous_location = run.ordered_route[i - 1]
         previous_distance = previous_location.distance(location)
-        difference = hub_insert_distance - previous_distance
+        packages_delivered += list(location.package_set)
         estimated_mileage = run.get_estimated_mileage_at_location(location)
         estimated_time = run.get_estimated_time_at_location(location)
+        if not latest_arrival_time or not _is_earlier_time(location.latest_package_arrival, latest_arrival_time):
+            latest_arrival_time = location.latest_package_arrival
+        departure_requirement_met = _is_earlier_time(location.latest_package_arrival, run.start_time)
+        delivery_time_requirement_met = _is_earlier_time(estimated_time, location.earliest_deadline)
+        if not delivery_time_requirement_met:
+            error_type = PackageNotArrivedError
+        if location.has_unconfirmed_package:
+            for package in location.package_set:
+                if package.package_id in config.EXCEPTED_UPDATES.keys():
+                    expected_update_time = config.EXCEPTED_UPDATES[package.package_id]['update_time']
+                    if not _is_earlier_time(expected_update_time, estimated_time):
+                        delivery_time_requirement_met = False
+                        error_type = UnconfirmedPackageDeliveryError
+        if not departure_requirement_met:
+            error_type = LateDeliveryError
+        if not delivery_time_requirement_met or not departure_requirement_met:
+            requirements_met = False
         estimated_mileage_to_hub = estimated_mileage + location.hub_distance
         estimated_time_at_hub_arrival = TimeConversion.convert_miles_to_time(estimated_mileage_to_hub, run.start_time)
+        hub_insert_distance = previous_location.hub_distance + location.hub_distance
+        difference = hub_insert_distance - previous_distance
+        seconds_from_hub = TimeConversion.get_seconds_between_times(run.start_time, estimated_time)
+        optimal_hub_departure_time = TimeConversion.increment_time(location.earliest_deadline, -seconds_from_hub)
+        if not minimum_optimal_start_time or (_is_earlier_time(optimal_hub_departure_time, minimum_optimal_start_time)
+                                              and not _is_earlier_time(optimal_hub_departure_time, latest_arrival_time)
+                                              ):
+            minimum_optimal_start_time = optimal_hub_departure_time
         undelivered_package_total = run.package_total() - len(packages_delivered)
-        run_analysis_dict[location] = {'previous_location': previous_location,
-                                       'miles_from_previous': previous_distance,
-                                       'miles_from_previous_with_hub_insert': hub_insert_distance,
-                                       'difference': difference,
-                                       'undelivered_package_total': undelivered_package_total,
-                                       'packages_delivered': copy(packages_delivered),
-                                       'locations_visited': copy(locations_visited),
-                                       'estimated_mileage_of_arrival': estimated_mileage,
-                                       'estimated_time_of_arrival': estimated_time,
-                                       'estimated_mileage_to_hub': estimated_mileage_to_hub,
-                                       'estimated_time_of_hub_arrival': estimated_time_at_hub_arrival}
+        run_analysis_dict[location] = {
+            'previous_location': previous_location,
+            'miles_from_previous': previous_distance,
+            'estimated_mileage_of_arrival': estimated_mileage,
+            'estimated_time_of_arrival': estimated_time,
+            'latest_allowable_delivery_time': copy(location.earliest_deadline),
+            'latest_allowable_hub_departure': copy(location.latest_package_arrival),
+            'undelivered_package_total': undelivered_package_total,
+            'departure_requirement_met': departure_requirement_met,
+            'delivery_time_requirement_met': delivery_time_requirement_met,
+            'packages_delivered': copy(packages_delivered),
+            'locations_visited': copy(locations_visited),
+            'estimated_mileage_to_hub': estimated_mileage_to_hub,
+            'estimated_time_of_hub_arrival': copy(estimated_time_at_hub_arrival),
+            'miles_from_previous_with_hub_insert': hub_insert_distance,
+            'difference': difference,
+            'is_valid_run_at_location': requirements_met,
+            'optimal_hub_departure_time': copy(optimal_hub_departure_time),
+            'minimum_optimal_time_at_location': copy(minimum_optimal_start_time),
+            'error_type': error_type
+        }
     return run_analysis_dict
 
 
@@ -423,56 +469,76 @@ def _simulate_load(run: RouteRun, truck: Truck):
     run.required_packages = truck.unload()
 
 
-def _check_requirements_met(run, hub_return_insertion_dict):
+def _check_requirements_met(run: RouteRun):
     for location in run.ordered_route:
-        if location not in hub_return_insertion_dict:
+        if location.is_hub:
             continue
-        estimated_time_of_arrival = hub_return_insertion_dict[location]['estimated_time_of_arrival']
-        for package in location.package_set:
-            if not TimeConversion.is_time_at_or_before_other_time(estimated_time_of_arrival, package.deadline):
-                print(f'Late Delivery ID:{package.package_id}, Location:{location.name}, time={estimated_time_of_arrival}')
-            if not package.is_verified_address:
-                print(f'Unverified Package, time={estimated_time_of_arrival}')
+        if not run.run_analysis_dict[location]['is_valid_run_at_location']:
+            if run.run_analysis_dict[location]['error_type']:
+                return run, run.run_analysis_dict[location]['error_type'], location
+    return run, None, None
 
 
-def _analyze_run(run: RouteRun, truck: Truck, hub_insertion_mileage_allowance: float):
-    hub_return_insertion_dict = _get_run_analysis_dict(run)
-    package_set = set()
-    _check_requirements_met(run, hub_return_insertion_dict)
+def _check_optimal_return_to_hub(run: RouteRun):
     if (run.package_total() + sum([len(location.package_set) for location in PackageHandler.all_locations
                                    if location.been_assigned]) != len(PackageHandler.all_packages)):
         for i, location in enumerate(run.ordered_route):
-            if location.is_hub or location not in hub_return_insertion_dict:
+            if location.is_hub or location not in run.run_analysis_dict:
                 continue
-            package_set.update(location.package_set)
-            mileage_difference = hub_return_insertion_dict[location]['difference']
-            if mileage_difference <= hub_insertion_mileage_allowance and len(package_set) >= 8:
-                run.ordered_route = run.ordered_route[:i + 1] + [Truck.hub_location]
+            previous_location = run.ordered_route[i - 1]
+            mileage_difference = run.run_analysis_dict[location]['difference']
+            packages_delivered = (run.run_analysis_dict[previous_location]['packages_delivered']
+                                  if not previous_location.is_hub else set())
+            try:
+                if 0 < mileage_difference <= config.HUB_RETURN_INSERTION_ALLOWANCE and len(packages_delivered) >= 8:
+                    raise OptimalHubReturnError
+            except OptimalHubReturnError:
+                run.ordered_route = run.ordered_route[:i] + [Truck.hub_location]
+                run.run_analysis_dict = _get_run_analysis_dict(run)
                 run.locations = set(run.ordered_route)
                 run.locations.remove(Truck.hub_location)
-                break
-        _simulate_load(run, truck)
-        return
+                return run, OptimalHubReturnError, None
+    return run, None, None
+
+
+def _analyze_run(run: RouteRun, truck: Truck):
+    run_analysis_dict = _get_run_analysis_dict(run)
+    run.run_analysis_dict = run_analysis_dict
+    run, error, error_location = _check_requirements_met(run)
+    if error:
+        return run, error, error_location
+    run, error, error_location = _check_optimal_return_to_hub(run)
+    _simulate_load(run, truck)
+    return run, error, error_location
 
 
 class RunPlanner:
 
     @staticmethod
-    def build(target_location: Location, truck: Truck, start_time=config.DELIVERY_DISPATCH_TIME, has_assigned_truck_focus=False):
-        if target_location.been_assigned or target_location.is_hub:
-            return None
+    def build(target_location, truck: Truck, run_focus: RunFocus = None, start_time=config.DELIVERY_DISPATCH_TIME):
         run = RouteRun(start_time=start_time)
         run.target_location = target_location
-        run.has_assigned_truck_focus = has_assigned_truck_focus
-        run.focused_run = has_assigned_truck_focus
         run.assigned_truck_id = truck.truck_id
+        if isinstance(target_location, dict):
+            paired_target_id, target_set = copy(target_location).popitem()
+            run.target_location = sorted(target_set, key=lambda _target: _target.hub_distance, reverse=True).pop()
+            run.assigned_truck_id = paired_target_id
+        elif target_location.been_assigned or target_location.is_hub:
+            return
+        run.focused_run = run_focus
+        latest_delayed_time = max([package.hub_arrival_time for package in PackageHandler.get_delayed_packages()])
+        if (not _is_earlier_time(run.target_location.earliest_deadline, latest_delayed_time) and
+                run.start_time == config.DELIVERY_DISPATCH_TIME):
+            run.start_time = latest_delayed_time
         run.ordered_route = [Truck.hub_location]
         _get_optimized_run(run)
-        _analyze_run(run, truck, 2.5)
+        run, error, error_location = _analyze_run(run, truck)
+        if error and error is not OptimalHubReturnError:
+            return run, error, error_location
         _set_locations_as_assigned(run)
         run.set_required_packages()
         run.set_estimated_mileage()
         run.set_estimated_completion_time()
         run.set_assigned_truck_id()
         truck.route_runs.append(run)
-        return run
+        return run, error, error_location

@@ -18,17 +18,22 @@ class RouteBuilderError(Exception):
 class LateDeliveryError(RouteBuilderError):
     """Raised when a package is routed to a time that will result in a late delivery"""
 
-    def __init__(self, package: Package):
-        super().__init__(message=f'This route plan results in a late delivery at "{package.location.name}"'
-                                 f' at "{package.location.address} | Package ID: {package.package_id}')
+    def __init__(self):
+        super().__init__(message=f'This route plan results in a late delivery')
+
+
+class UnconfirmedPackageDeliveryError(RouteBuilderError):
+    """Raised when a package is routed to a time that will result in a delivery while a package is unconfirmed"""
+
+    def __init__(self):
+        super().__init__(message=f'This route plan results in a delivery to a location with unconfirmed packages')
 
 
 class PackageNotArrivedError(RouteBuilderError):
     """Raised when a package is routed to a time that results in being loaded on a truck before it arrives at the hub"""
 
-    def __init__(self, package: Package):
-        super().__init__(message=f'This route plan results in a package being loaded before it has arrived at the hub '
-                                 f'| Package ID: {package.package_id}')
+    def __init__(self):
+        super().__init__(message=f'This route plan results in a package being loaded before it has arrived at the hub')
 
 
 class TruckCapacityExceededError(RouteBuilderError):
@@ -43,11 +48,28 @@ class InvalidRouteRunError(RouteBuilderError):
     """Raised when route run is created with 2 different assigned trucks ids"""
 
     def __init__(self):
-        super().__init__(message=f'This route plan results in route run with 2 different assigned trucks')
+        super().__init__(message=f'This route plan results in route run with locations assigned to 2 different trucks')
+
+
+class OverlappingRouteRunError(RouteBuilderError):
+    """Raised when route runs assigned to the same truck are overlapping"""
+
+    def __init__(self):
+        super().__init__(message=f'This route plan results in route runs assigned to the same truck are have'
+                                 f' overlapping start and/or end times')
 
 
 class BundledPackageTruckAssignmentError(RouteBuilderError):
     """Raised when bundled packages and locations are not given an assigned truck once any of them are assigned"""
 
     def __init__(self):
-        super().__init__(message=f'This Route Run must be assigned at truck id does not assign all bundled packages to the same truck if any are assigned')
+        super().__init__(message=f'This Route Run must be assigned at truck id does not assign all'
+                                 f' bundled packages to the same truck if any are assigned')
+
+
+class OptimalHubReturnError(RouteBuilderError):
+    """Raised when truck will be in close vicinity of hub and the truck is less than half empty"""
+
+    def __init__(self):
+        super().__init__(message=f'This Route Run results in the truck not returning to the hub when the truck'
+                                 f'close and the truck would be more than half empty')

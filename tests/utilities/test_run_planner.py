@@ -4,6 +4,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from src import config
+from src.constants.run_focus import RunFocus
 from src.models.route_run import RouteRun
 from src.models.truck import Truck
 from src.utilities.package_handler import PackageHandler
@@ -30,11 +31,12 @@ class TestRunPlanner(TestCase):
         self.package_hash = PackageHandler.package_hash
 
     def test_early_return_run_build(self):
+        truck = Truck(1)
         early_return_packages = PackageHandler.get_bundled_packages()
         package_locations = PackageHandler.get_package_locations(early_return_packages)
         target_package = self.package_hash.get_package(15)
         target_location = target_package.location
-        early_return_run = RunPlanner.build(target_location, return_to_hub=True, focused_run=True, assigned_truck_id=1)
+        early_return_run = RunPlanner.build(target_location, truck)
 
         assert len(early_return_run.ordered_route) == 4
         assert target_location in early_return_run.ordered_route
@@ -49,18 +51,27 @@ class TestRunPlanner(TestCase):
             if package.location.been_assigned:
                 early_return_run.required_packages.remove(package)
         assert len(early_return_run.required_packages) == 3
-        early_return_run = RunPlanner.build(target_location, return_to_hub=True, focused_run=True)
+        early_return_run = RunPlanner.build(target_location, truck)
         assert target_location.been_assigned
         assert not early_return_run
 
     def test_furthest_from_hub_location_run_build(self):
         truck1 = Truck(1)
         truck = Truck(2)
-        run = RunPlanner.build(self.package_hash.get_package(15).location, truck1)
-        focused_run = RunPlanner.build(self.package_hash.get_package(3).location, truck, start_time=time(9, 5), has_assigned_truck_focus=True)
-
-        furthest_location_run = RunPlanner.build(self.package_hash.get_package(22).location, truck1, start_time=time(9, 5))
+        run, error, error_location = RunPlanner.build(self.package_hash.get_package(15).location, truck1)
+        for location in run.ordered_route:
+            print(location)
+        print('\n')
+        focused_run, error, error_location = RunPlanner.build(self.package_hash.get_package(3).location, truck, run_focus=RunFocus.ASSIGNED_TRUCK, start_time=time(9, 55))
+        for location in focused_run.ordered_route:
+            print(location)
+        print('\n')
+        furthest_location_run, error, error_location = RunPlanner.build(self.package_hash.get_package(22).location, truck1, start_time=time(9, 5))
+        for location in furthest_location_run.ordered_route:
+            print(location)
+        print('\n')
         print(run.estimated_mileage + focused_run.estimated_mileage + furthest_location_run.estimated_mileage)
+        print([location for location in PackageHandler.all_locations if not location.been_assigned])
         # package_count = 0
         # estimate_mileage = 0
         # min_miles = 100

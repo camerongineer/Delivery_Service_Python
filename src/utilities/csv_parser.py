@@ -198,6 +198,8 @@ class CsvParser:
                 weight = int(row['Mass KILO'])
                 special_note = row['Special Notes']
                 is_verified_address = not special_note.startswith('Wrong address')
+                if not is_verified_address:
+                    location.has_unconfirmed_package = True
                 package = Package(package_id=package_id, location=package_location,
                                   is_verified_address=is_verified_address, deadline=deadline,
                                   weight=weight, special_note=special_note)

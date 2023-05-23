@@ -2,8 +2,10 @@ from datetime import time, datetime
 
 from src.utilities.path_utils import PathUtils
 
-UI_ELEMENTS_ENABLED = True
+UI_ELEMENTS_ENABLED = False
 UI_SPEED = 300
+
+HUB_RETURN_INSERTION_ALLOWANCE = 2.5
 
 NUM_DRIVERS = 2
 NUM_DELIVERY_TRUCKS = 3
@@ -19,5 +21,7 @@ DELIVERY_DATE = datetime.min
 DISTANCE_CSV_FILE = PathUtils.get_full_file_path('distance_table.csv')
 PACKAGE_CSV_FILE = PathUtils.get_full_file_path('package_file.csv')
 
+EXCEPTED_UPDATES = dict()
 PACKAGE_9_ADDRESS_CHANGE_TIME = time(hour=10, minute=20)
 PACKAGE_9_UPDATED_ADDRESS = "410 S State St., Salt Lake City, UT 84111"
+EXCEPTED_UPDATES[9] = {'update_time': PACKAGE_9_ADDRESS_CHANGE_TIME, 'address': PACKAGE_9_UPDATED_ADDRESS}
