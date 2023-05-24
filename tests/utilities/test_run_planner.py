@@ -58,15 +58,15 @@ class TestRunPlanner(TestCase):
     def test_furthest_from_hub_location_run_build(self):
         truck1 = Truck(1)
         truck = Truck(2)
-        run, error, error_location = RunPlanner.build(self.package_hash.get_package(15).location, truck1)
+        run = RunPlanner.build(self.package_hash.get_package(15).location, truck1)
         for location in run.ordered_route:
             print(location)
         print('\n')
-        focused_run, error, error_location = RunPlanner.build(self.package_hash.get_package(3).location, truck, run_focus=RunFocus.ASSIGNED_TRUCK, start_time=time(9, 55))
+        focused_run = RunPlanner.build(self.package_hash.get_package(3).location, truck, run_focus=RunFocus.ASSIGNED_TRUCK, start_time=time(9, 55))
         for location in focused_run.ordered_route:
             print(location)
         print('\n')
-        furthest_location_run, error, error_location = RunPlanner.build(self.package_hash.get_package(22).location, truck1, start_time=time(9, 5))
+        furthest_location_run = RunPlanner.build(self.package_hash.get_package(22).location, truck1, start_time=time(9, 5))
         for location in furthest_location_run.ordered_route:
             print(location)
         print('\n')

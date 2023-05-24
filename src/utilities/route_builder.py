@@ -514,8 +514,10 @@ from typing import Set
 from src import config
 from src.constants.color import Color
 from src.constants.run_focus import RunFocus
+from src.constants.run_info import RunInfo
 from src.exceptions.route_builder_error import OptimalHubReturnError, UnconfirmedPackageDeliveryError
 from src.models.location import Location
+from src.models.package import Package
 from src.models.route_run import RouteRun
 from src.models.truck import Truck
 from src.utilities.package_handler import PackageHandler
@@ -554,6 +556,14 @@ def _find_furthest_location_away(in_location: Location) -> Location:
     furthest_location = distance_sorted_locations[0][0]
     _display_location_details(furthest_location, in_location)
     return furthest_location
+
+
+def _display_package_details(run: RouteRun, in_package: Package):
+    UI.print((f'Package ID: {str(in_package.package_id).zfill(2)} | ' + f'Arrival time at hub:'
+              f' {in_package.hub_arrival_time} with expected departure of {run.start_time}  | ' +
+              (f'Has a deadline of {in_package.deadline}' if in_package.deadline != config.DELIVERY_RETURN_TIME else
+               'Has no deadline') + (' | Address is not confirmed' if not in_package.is_verified_address else '')),
+             sleep_seconds=1)
 
 
 def _display_location_details(in_location: Location, origin_location: Location):
@@ -626,17 +636,17 @@ def _analyze_paired_targets(index_number: int, paired_targets: dict):
     UI.print(f'Analyzing {len(target_set)} targets for run #{index_number + 1} - '
              f'"{list(target_set)[0].name}" and "{list(target_set)[1].name}"', color=Color.YELLOW, think=True)
     if truck_id:
-        UI.print(f'These locations is assigned to truck #{truck_id}', color=Color.RED, think=True)
-        UI.print(f'All locations on this run must also be assigned to truck #{truck_id}', think=True, extra_lines=1)
+        UI.print(f'These locations are both assigned to truck #{truck_id}', color=Color.RED, think=True)
         if len([location for location in PackageHandler.all_locations if location.assigned_truck_id == truck_id]) >= 4:
-            UI.print(f'Multiple locations requiring truck #{truck_id} detected', sleep_seconds=4, color=Color.RED)
             UI.print(f'Prioritizing run focused on deliveries to locations requiring truck #{truck_id}',
                      think=True, extra_lines=2)
+            UI.print(f'Multiple locations requiring truck #{truck_id} detected', sleep_seconds=4, color=Color.RED)
     return RunFocus.ASSIGNED_TRUCK
 
 
 def _analyze_target_location(index_number: int, target_location: Location):
-    UI.print(f'Analyzing target run #{index_number + 1} - "{target_location.name}"', color=Color.YELLOW, think=True)
+    UI.print(f'Analyzing target #{index_number + 1} - "{target_location.name}"', color=Color.YELLOW, think=True,
+             extra_lines=1)
     if target_location.has_early_deadline():
         UI.print(f'This location has packages due be delivered by {target_location.earliest_deadline}',
                  color=Color.RED, think=True)
@@ -686,33 +696,62 @@ def _unconfirmed_package_delivery_message(run):
 
 
 def _analyze_route_run(index_number: int, run: RouteRun):
-    UI.print(f'Run #{index_number + 1} successfully built!', sleep_seconds=3, extra_lines=1)
+    UI.print(f'Run #{index_number + 1} successfully built!', sleep_seconds=3, extra_lines=1, color=Color.YELLOW)
+    UI.print(f'The truck #{run.assigned_truck_id} is assigned, with an estimated departure time of {run.start_time}'
+             f' and completion time of {run.estimated_completion_time}', extra_lines=1, sleep_seconds=3)
     UI.print(f'Analysing run #{index_number + 1} with target location: "{run.target_location.name}"',
              think=True, extra_lines=1)
-    for location in run.ordered_route:
+    visited_locations = list()
+    for i, location in enumerate(run.ordered_route):
         if location.is_hub:
             continue
-        location_dict = run.run_analysis_dict[location]
-        packages = location.package_set
-        UI.print(f'{len(packages)} package' + ('s' if len(packages) != 1 else '') +
-                 f' | "{location.name}" | Expected arrival time is {location_dict["estimated_time_of_arrival"]}'
-                 , sleep_seconds=1, color=Color.BLUE)
-        for package in packages:
-            UI.print(f'Package ID: {str(package.package_id).zfill(2)} | ' + (f'Has a deadline of {package.deadline}'
-                                                                             if package.deadline != config.DELIVERY_RETURN_TIME else 'Has no deadline')
-                     + ' | Successful delivery will be achieved!', sleep_seconds=1)
-        print()
-    UI.print(f'\nThe total expected miles on this run is {run.estimated_mileage} '
+        if location in visited_locations:
+            location_dict = run.run_analysis_dict[(location, visited_locations[-1])]
+            UI.print(f'Return to {location.name} to optimize mileage | No packages delivered |'
+                     f' Expected arrival time is {location_dict[RunInfo.ESTIMATED_TIME]}',
+                     color=Color.RED, sleep_seconds=3, extra_lines=1)
+        else:
+            location_dict = run.run_analysis_dict[location]
+            UI.print((f'Expected arrival time is {location_dict[RunInfo.ESTIMATED_TIME]} |'
+                      f' Mileage from the previous location is'
+                      f' {location_dict[RunInfo.PREVIOUS_LOCATION].distance(location)} miles'),
+                     sleep_seconds=1, color=Color.BLUE)
+            packages = location.package_set
+            UI.print(f'{len(packages)} package' + ('s' if len(packages) != 1 else '') +
+                     f' | "{location.name}" located at "{location.address}"', sleep_seconds=1, color=Color.BLUE)
+            for package in packages:
+                _display_package_details(run, package)
+            print()
+        visited_locations.append(location)
+    print()
+    if run.ordered_route[-1].is_hub:
+        UI.print(f'Expected arrival back to hub is {run.estimated_completion_time}',
+                 extra_lines=1, color=Color.YELLOW, sleep_seconds=3)
+        undelivered_packages = (run.required_packages.difference(
+            set.union(*[location.package_set for location in run.ordered_route])))
+        if undelivered_packages:
+            UI.print('These packages must remain on the truck during reload for the next run',
+                     color=Color.RED, sleep_seconds=4, extra_lines=1)
+            for package in undelivered_packages:
+                _display_package_details(run, package)
+            print()
+    UI.print(f'\nThe total expected miles on this run is {run.estimated_mileage:.1f} '
              f'with an expected completion time of {run.estimated_completion_time} |'
-             f' The package delivery total is {run.package_total()}',
-             sleep_seconds=4, color=Color.GREEN, extra_lines=4)
+             f' The expected package delivery total is {run.package_total()}',
+             sleep_seconds=7, color=Color.GREEN, extra_lines=3)
 
 
 def _select_truck_for_run(target_location: Location, available_truck_pool: Set[Truck],
                           unavailable_truck_pool: Set[Truck]) -> Truck:
     truck = None
+    if (len([package for package in PackageHandler.all_packages if not package.location.been_assigned])
+            <= config.NUM_TRUCK_CAPACITY):
+        remaining_ids = set([package.assigned_truck_id for package in PackageHandler.all_packages
+                             if package.assigned_truck_id and not package.location.been_assigned])
+        target_location.assigned_truck_id = remaining_ids.pop()
     for available_truck in copy(available_truck_pool):
-        if isinstance(target_location, Location) and target_location.has_required_truck_package:
+        if (isinstance(target_location, Location) and (target_location.has_required_truck_package or
+                target_location.assigned_truck_id)):
             if target_location.assigned_truck_id and available_truck.truck_id == target_location.assigned_truck_id:
                 truck = available_truck
         elif isinstance(target_location, dict):
@@ -722,8 +761,9 @@ def _select_truck_for_run(target_location: Location, available_truck_pool: Set[T
         else:
             truck = random.choice(list(available_truck_pool))
             break
-    # available_truck_pool.remove(truck)
-    # unavailable_truck_pool.add(truck)
+    if truck:
+        available_truck_pool.remove(truck)
+        unavailable_truck_pool.add(truck)
     if not truck:
         truck_id = None
         if isinstance(target_location, Location) and target_location.assigned_truck_id and unavailable_truck_pool:
@@ -741,11 +781,10 @@ def _create_optimized_runs(targets) -> Set[Truck]:
     required_truck_ids = set([pair.keys() for pair in targets if isinstance(pair, dict)].pop())
     UI.print('Finding available delivery trucks', think=True, color=Color.YELLOW)
     available_truck_pool, unavailable_truck_pool = _initialize_trucks(required_truck_ids)
-    UI.print(f'{len(available_truck_pool)} trucks found', sleep_seconds=4, extra_lines=1)
+    UI.print(f'{len(available_truck_pool.union(unavailable_truck_pool))} trucks found', sleep_seconds=4, extra_lines=1)
     for i, target_location in enumerate(targets):
         run = None
         truck = None
-        error_location = None
         focus_type = None
         try:
             if isinstance(target_location, dict):
@@ -753,18 +792,19 @@ def _create_optimized_runs(targets) -> Set[Truck]:
             else:
                 focus_type = _analyze_target_location(i, target_location)
             truck = _select_truck_for_run(target_location, available_truck_pool, unavailable_truck_pool)
-            created_run, error, error_location = RunPlanner.build(target_location, truck, focus_type)
-            if error:
+            created_run = RunPlanner.build(target_location, truck, focus_type)
+            if created_run.error_type:
                 run = created_run
-                raise error
+                raise created_run.error_type
+            else:
+                run = created_run
         except OptimalHubReturnError:
             _optimal_hub_return_message()
         except UnconfirmedPackageDeliveryError:
             _unconfirmed_package_delivery_message(run)
-            error_run_start_time = run.run_analysis_dict[error_location]['optimal_hub_departure_time']
+            error_run_start_time = run.run_analysis_dict[run.error_location][RunInfo.OPTIMAL_HUB_DEPARTURE_TIME]
             modified_error_start_time = TimeConversion.increment_time(error_run_start_time, time_seconds=-120)
-            run, error, error_location = \
-                RunPlanner.build(target_location, truck, focus_type, start_time=modified_error_start_time)
+            run = RunPlanner.build(target_location, truck, focus_type, start_time=modified_error_start_time)
         finally:
             _analyze_route_run(i, run)
     UI.press_enter_to_continue()

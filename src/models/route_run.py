@@ -25,6 +25,8 @@ class RouteRun:
         self._return_to_hub: bool = return_to_hub
         self._focused_run = None
         self._run_analysis_dict = None
+        self._error_location = None
+        self._error_type = None
 
 
     @property
@@ -75,6 +77,14 @@ class RouteRun:
     def run_analysis_dict(self):
         return self._run_analysis_dict
 
+    @property
+    def error_location(self):
+        return self._error_location
+
+    @error_location.setter
+    def error_location(self, value: Location):
+        self._error_location = value
+
     @ordered_route.setter
     def ordered_route(self, value: Set[Location]):
         self._ordered_route = value
@@ -103,18 +113,27 @@ class RouteRun:
     def focused_run(self, value: RunFocus):
         self._focused_run = value
 
+    @required_packages.setter
+    def required_packages(self, value):
+        self._required_packages = value
+
     @run_analysis_dict.setter
     def run_analysis_dict(self, value: dict):
         self._run_analysis_dict = value
+
+    @property
+    def error_type(self):
+        return self._error_type
+
+    @error_type.setter
+    def error_type(self, value):
+        self._error_type = value
 
     def package_total(self, alternate_locations: Set[Location] = None):
         return len(self.get_all_packages(alternate_locations))
 
     def set_estimated_mileage(self):
-        mileage = self.ordered_route[0].distance(self.ordered_route[1])
-        for i in range(1, len(self.ordered_route)):
-            mileage += self.ordered_route[i - 1].distance(self.ordered_route[i])
-        self._estimated_mileage = mileage
+        self._estimated_mileage = self.get_estimated_mileage_at_location(index=len(self.ordered_route) - 1)
 
     def set_estimated_completion_time(self):
         self._estimated_completion_time = TimeConversion.convert_miles_to_time(self._estimated_mileage,
@@ -148,24 +167,25 @@ class RouteRun:
             all_packages.update(location.package_set)
         return all_packages
 
-    @required_packages.setter
-    def required_packages(self, value):
-        self._required_packages = value
-
-    def get_estimated_mileage_at_location(self, target_location):
+    def get_estimated_mileage_at_location(self, target_location: Location = None, index: int = None):
         mileage = 0
-        for i in range(1, len(self.ordered_route)):
+        if index == 0:
+            return 0
+        length_of_route = len(self.ordered_route) - 1 if not index else index
+        i = 1
+        while i <= length_of_route:
             previous_location = self.ordered_route[i - 1]
             next_location = self.ordered_route[i]
             miles_to_next = previous_location.distance(next_location)
-            if next_location is target_location:
-                return mileage + miles_to_next
+            if previous_location is target_location:
+                return mileage
             else:
                 mileage += miles_to_next
-        return mileage + target_location.distance(self.ordered_route[-1])
+            i += 1
+        return mileage
 
-    def get_estimated_time_at_location(self, target_location):
-        mileage = self.get_estimated_mileage_at_location(target_location)
+    def get_estimated_time_at_location(self, target_location: Location = None, index: int = None):
+        mileage = self.get_estimated_mileage_at_location(target_location=target_location, index=index)
         return TimeConversion.convert_miles_to_time(mileage, start_time=self.start_time, pause_seconds=0)
 
     def assigned_truck_location_total(self):
