@@ -4,7 +4,7 @@ from src.utilities.path_utils import PathUtils
 
 UI_ENABLED = False
 UI_ELEMENTS_ENABLED = True
-UI_SPEED = 100
+UI_SPEED = 500
 
 HUB_RETURN_INSERTION_ALLOWANCE = 2.5
 FILL_IN_INSERTION_ALLOWANCE = 3

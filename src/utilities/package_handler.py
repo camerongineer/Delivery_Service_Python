@@ -4,6 +4,7 @@ from typing import List, Set
 
 from src import config
 from src.constants.delivery_status import DeliveryStatus
+from src.exceptions import DelayedPackagesArrivedException, AddressUpdateException
 from src.models.location import Location
 from src.models.package import Package
 from src.models.truck import Truck
@@ -24,8 +25,8 @@ def _is_loadable_package_set(truck: Truck, in_package_set: Set[Package]) -> bool
 
 
 def _is_package_arriving_at_hub(package: Package, current_time: time) -> bool:
-    return package.status is DeliveryStatus.ON_ROUTE_TO_DEPOT and \
-        TimeConversion.is_time_at_or_before_other_time(package.hub_arrival_time, current_time)
+    return (package.status is DeliveryStatus.ON_ROUTE_TO_DEPOT and
+            TimeConversion.is_time_at_or_before_other_time(package.hub_arrival_time, current_time))
 
 
 def _is_package_address_updating(package: Package, current_time: time) -> bool:
@@ -64,23 +65,23 @@ class PackageHandler:
                     package.location = location
                     package.location.package_set.add(package)
                     package.is_verified_address = True
-                    return True
+                    raise AddressUpdateException(package, old_location)
         except (ValueError, TypeError):
             return False
         return False
 
     @staticmethod
     def bulk_status_update(current_time: time, packages=all_packages):
+        delayed_packages_arrived = False
         for package in packages:
             if _is_package_arriving_at_hub(package, current_time):
                 package.update_status(DeliveryStatus.AT_HUB, current_time)
+                delayed_packages_arrived = True
             if _is_package_address_updating(package, current_time):
-                old_location = package.location.address
                 PackageHandler.update_delivery_location(PackageHandler.all_locations, package,
                                                         config.PACKAGE_9_UPDATED_ADDRESS)
-                new_location = package.location.address
-                print(
-                    f'Package: {package.package_id:02} address changed from "{old_location}" to "{new_location} at {current_time}"')
+        if delayed_packages_arrived:
+            raise DelayedPackagesArrivedException
 
     @staticmethod
     def get_location_package_dict(in_packages=all_packages):

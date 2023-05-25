@@ -223,11 +223,10 @@ def _best_option(run: RouteRun, valid_options: dict, secondary_options: dict):
     return first_location, second_location
 
 
-def _is_valid_insert(location: Location, insert_location: Location, run_analysis_dict):
-    previous_location = run_analysis_dict[location][RunInfo.PREVIOUS_LOCATION]
-    next_location = run_analysis_dict[location][RunInfo.NEXT_LOCATION]
-    miles_from_previous = run_analysis_dict[location][RunInfo.MILES_FROM_PREVIOUS] if previous_location else 0
-    miles_to_next = run_analysis_dict[location][RunInfo.MILES_TO_NEXT] if next_location else 0
+def _is_valid_insert(previous_location: Location, location: Location, insert_location: Location, run_analysis_dict):
+    next_location = run_analysis_dict[(previous_location, location)][RunInfo.NEXT_LOCATION]
+    miles_from_previous = run_analysis_dict[(previous_location, location)][RunInfo.MILES_FROM_PREVIOUS]
+    miles_to_next = run_analysis_dict[(previous_location, location)][RunInfo.MILES_TO_NEXT] if next_location else 0
     current_mileage = miles_from_previous + miles_to_next
     if (insert_location.distance(location) * 2) > current_mileage:
         return False
@@ -238,23 +237,22 @@ def _is_valid_insert(location: Location, insert_location: Location, run_analysis
     return current_mileage - new_mileage > 0
 
 
-def _optimized_revisit(run: RouteRun, run_analysis_dict):
-    reversed_ordered_route = reversed(run.ordered_route[:])
-    ordered_route = run.ordered_route[:]
+def _optimized_revisit(run: RouteRun):
     while True:
         was_changed = False
-        ordered_route_copy = ordered_route[:]
-        for location in reversed_ordered_route:
-            if location.is_hub:
+        ordered_route_copy = run.ordered_route[:]
+        for i, location in enumerate(run.ordered_route):
+            if i == 0:
                 continue
-            if run_analysis_dict[location][RunInfo.MILES_FROM_PREVIOUS] > 2:
+            previous_location = run.ordered_route[i - 1]
+            if run.run_analysis_dict[(previous_location, location)][RunInfo.MILES_FROM_PREVIOUS] > 2:
                 best_mileage = None
                 best_insert = None
-                for i in range(len(run.ordered_route)):
-                    insert_location = run.ordered_route[i]
+                for j in range(len(run.ordered_route)):
+                    insert_location = run.ordered_route[j]
                     if insert_location is location or insert_location.is_hub:
                         continue
-                    if _is_valid_insert(location, insert_location, run_analysis_dict):
+                    if _is_valid_insert(previous_location, location, insert_location, run.run_analysis_dict):
                         if not best_mileage or insert_location.distance(location) < best_mileage:
                             best_mileage = insert_location.distance(location)
                             best_insert = insert_location
@@ -266,13 +264,12 @@ def _optimized_revisit(run: RouteRun, run_analysis_dict):
                     second_half = ordered_route_copy[best_insert_index + 1:]
                     first_half += [location]
                     ordered_route_copy = first_half + second_half
-                    ordered_route = ordered_route_copy
+                    run.ordered_route = ordered_route_copy
+                    run.run_analysis_dict = _get_run_analysis_dict(run)
                     was_changed = True
+                    break
         if not was_changed:
             break
-    run.ordered_route = ordered_route
-    run_analysis_dict = _get_run_analysis_dict(run)
-    run.run_analysis_dict = run_analysis_dict
 
 
 def _in_close_proximity_of_undeliverable(run, in_location: Location) -> bool:
@@ -395,34 +392,33 @@ def _is_earlier_time(first_time: time, second_time: time):
 
 def _get_run_analysis_dict(run: RouteRun):
     run_analysis_dict = dict()
-    packages_delivered = list()
+    packages_delivered = set()
     locations_visited = list()
     requirements_met = True
     minimum_optimal_start_time = None
     latest_arrival_time = None
     for i, location in enumerate(run.ordered_route, start=0):
-        if location.is_hub:
-            continue
-        insert_location = location
-        previous_location = run.ordered_route[i - 1]
-        if location in run_analysis_dict:
-            insert_location = (location, previous_location)
+        previous_location = run.ordered_route[i - 1] if i > 0 else None
         error_type = None
         error_location = None
+        previous_distance = previous_location.distance(location) if previous_location else 0
         locations_visited.append(location)
-        previous_distance = previous_location.distance(location)
         next_location = run.ordered_route[i + 1] if i + 1 < len(run.ordered_route) else None
         next_distance = location.distance(next_location) if next_location else None
-        packages_delivered += list(location.package_set) if isinstance(insert_location, Location) else []
+        if not location.is_hub:
+            packages_delivered.update(location.package_set)
         estimated_mileage = run.get_estimated_mileage_at_location(index=i)
         estimated_time = TimeConversion.convert_miles_to_time(estimated_mileage, start_time=run.start_time)
         estimated_mileage_at_next = run.get_estimated_mileage_at_location(index=i + 1) if next_location else None
         estimated_time_at_next = TimeConversion.convert_miles_to_time(
             estimated_mileage_at_next, start_time=run.start_time) if next_location else None
-        if not latest_arrival_time or not _is_earlier_time(location.latest_package_arrival, latest_arrival_time):
-            latest_arrival_time = location.latest_package_arrival
-        departure_requirement_met = _is_earlier_time(location.latest_package_arrival, run.start_time)
-        delivery_time_requirement_met = _is_earlier_time(estimated_time, location.earliest_deadline)
+        departure_requirement_met = True
+        delivery_time_requirement_met = True
+        if not location.is_hub:
+            if not latest_arrival_time or not _is_earlier_time(location.latest_package_arrival, latest_arrival_time):
+                latest_arrival_time = location.latest_package_arrival
+            departure_requirement_met = _is_earlier_time(location.latest_package_arrival, run.start_time)
+            delivery_time_requirement_met = _is_earlier_time(estimated_time, location.earliest_deadline)
         if not delivery_time_requirement_met:
             error_type = LateDeliveryError
         if location.has_unconfirmed_package:
@@ -436,15 +432,12 @@ def _get_run_analysis_dict(run: RouteRun):
             error_type = PackageNotArrivedError
         if not delivery_time_requirement_met or not departure_requirement_met:
             requirements_met = False
-            if not run.error_type:
-                run.error_type = error_type
             if not error_location:
-                error_location = location
-                run.error_location = location
+                error_location = (previous_location, location)
         estimated_mileage_to_hub = estimated_mileage + location.hub_distance
         estimated_time_at_hub_arrival = TimeConversion.convert_miles_to_time(estimated_mileage_to_hub, run.start_time)
-        hub_insert_distance = previous_location.hub_distance + location.hub_distance
-        difference = hub_insert_distance - previous_distance
+        hub_insert_distance = 0 if location.is_hub else previous_location.hub_distance + location.hub_distance
+        difference = 0 if location.is_hub else hub_insert_distance - previous_distance
         seconds_from_hub = TimeConversion.get_seconds_between_times(run.start_time, estimated_time)
         optimal_hub_departure_time = TimeConversion.increment_time(location.earliest_deadline, -seconds_from_hub)
         if not minimum_optimal_start_time or (_is_earlier_time(optimal_hub_departure_time, minimum_optimal_start_time)
@@ -452,7 +445,7 @@ def _get_run_analysis_dict(run: RouteRun):
         ):
             minimum_optimal_start_time = optimal_hub_departure_time
         undelivered_package_total = run.package_total() - len(packages_delivered)
-        run_analysis_dict[insert_location] = {
+        run_analysis_dict[(previous_location, location)] = {
             RunInfo.PREVIOUS_LOCATION: previous_location,
             RunInfo.MILES_FROM_PREVIOUS: previous_distance,
             RunInfo.NEXT_LOCATION: next_location,
@@ -478,8 +471,8 @@ def _get_run_analysis_dict(run: RouteRun):
             RunInfo.ERROR_TYPE: error_type,
             RunInfo.ERROR_LOCATION: error_location
         }
-    run.error_type = run_analysis_dict[locations_visited[-1]][RunInfo.ERROR_TYPE]
-    run.error_location = run_analysis_dict[locations_visited[-1]][RunInfo.ERROR_LOCATION]
+    run.error_type = run_analysis_dict[(locations_visited[-2], locations_visited[-1])][RunInfo.ERROR_TYPE]
+    run.error_location = run_analysis_dict[(locations_visited[-2], locations_visited[-1])][RunInfo.ERROR_LOCATION]
     return run_analysis_dict
 
 
@@ -497,25 +490,26 @@ def _simulate_load(run: RouteRun, truck: Truck):
 
 
 def _check_requirements_met(run: RouteRun):
-    for location in run.ordered_route:
-        if location.is_hub:
+    for i, location in enumerate(run.ordered_route):
+        if i == 0:
             continue
-        if not run.run_analysis_dict[location][RunInfo.IS_VALID_RUN_AT_LOCATION]:
-            if run.run_analysis_dict[location][RunInfo.ERROR_TYPE]:
-                run.error_location = run.run_analysis_dict[location][RunInfo.ERROR_LOCATION]
-                run.error_type = run.run_analysis_dict[location][RunInfo.ERROR_TYPE]
+        previous_location = run.ordered_route[i - 1]
+        if not run.run_analysis_dict[(previous_location, location)][RunInfo.IS_VALID_RUN_AT_LOCATION]:
+            if run.run_analysis_dict[(previous_location, location)][RunInfo.ERROR_TYPE]:
+                run.error_location = run.run_analysis_dict[(previous_location, location)][RunInfo.ERROR_LOCATION]
+                run.error_type = run.run_analysis_dict[(previous_location, location)][RunInfo.ERROR_TYPE]
+                break
 
 
 def _check_optimal_return_to_hub(run: RouteRun):
     if (run.package_total() + sum([len(location.package_set) for location in PackageHandler.all_locations
                                    if location.been_assigned]) != len(PackageHandler.all_packages)):
         for i, location in enumerate(run.ordered_route):
-            if location.is_hub or location not in run.run_analysis_dict:
+            if i == 0:
                 continue
             previous_location = run.ordered_route[i - 1]
-            mileage_difference = run.run_analysis_dict[location][RunInfo.DIFFERENCE]
-            packages_delivered = (run.run_analysis_dict[previous_location][RunInfo.PACKAGES_DELIVERED]
-                                  if not previous_location.is_hub else set())
+            mileage_difference = run.run_analysis_dict[(previous_location, location)][RunInfo.DIFFERENCE]
+            packages_delivered = run.run_analysis_dict[(previous_location, location)][RunInfo.PACKAGES_DELIVERED]
             try:
                 if (0 < mileage_difference <= config.HUB_RETURN_INSERTION_ALLOWANCE and len(packages_delivered) >=
                         len(PackageHandler.all_packages) % config.NUM_TRUCK_CAPACITY):
@@ -526,7 +520,8 @@ def _check_optimal_return_to_hub(run: RouteRun):
                 run.locations = set(run.ordered_route)
                 run.locations.remove(Truck.hub_location)
                 run.error_type = OptimalHubReturnError
-                run.error_location = location
+                run.error_location = (previous_location, location)
+                break
 
 
 def _analyze_run(run: RouteRun, truck: Truck):
@@ -534,7 +529,7 @@ def _analyze_run(run: RouteRun, truck: Truck):
     run.run_analysis_dict = run_analysis_dict
     if run.error_type and run.error_type is not LateDeliveryError:
         return run
-    _optimized_revisit(run, run_analysis_dict)
+    _optimized_revisit(run)
     _check_requirements_met(run)
     _check_optimal_return_to_hub(run)
     _simulate_load(run, truck)

@@ -9,5 +9,6 @@ class TestRouteBuilder(TestCase):
 
     def test_build_optimized_runs(self):
         config.UI_ENABLED = False
+        config.UI_ELEMENTS_ENABLED = False
         RouteBuilder.build_optimized_runs()
         assert not [location for location in PackageHandler.all_locations if not location.been_assigned]

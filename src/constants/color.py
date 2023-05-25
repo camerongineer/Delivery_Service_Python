@@ -8,5 +8,9 @@ class Color(Enum):
     BLUE = '\033[34m',
     MAGENTA = '\033[35m',
     CYAN = '\033[36m',
+    BRIGHT_GREEN = '\033[32;1m',
+    BRIGHT_BLUE = '\033[34;1m',
+    BRIGHT_MAGENTA = '\033[35;1m',
+    BRIGHT_CYAN = '\033[36;1m',
+    COLOR_ESCAPE = '\033[0m',
 
-    COLOR_ESCAPE = '\033[0m'

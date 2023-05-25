@@ -141,18 +141,22 @@ remaining capacity: {self._capacity - self._size}'''
     def next_location(self, value: Location):
         self._next_location = value
 
-    def add_package(self, package: Package):
+    def add_package(self, package: Package, is_simulated_load=True):
         if self._size > config.NUM_TRUCK_CAPACITY:
             raise TruckCapacityExceededError
+        if not is_simulated_load:
+            package.update_status(DeliveryStatus.LOADED, self.clock)
         super().add_package(package)
 
     def packages(self):
         return self._arr
 
-    def dispatch(self, current_time):
+    def dispatch(self):
         if not self._is_dispatched:
-            self._dispatch_time = current_time
+            self._dispatch_time = self.clock
             self._is_dispatched = True
+        for package in self.current_run.required_packages:
+            package.update_status(DeliveryStatus.OUT_FOR_DELIVERY, self.clock)
 
     def unload(self) -> Set[Package]:
         truck_packages = set()
@@ -247,4 +251,8 @@ remaining capacity: {self._capacity - self._size}'''
             self.remove_package(package.package_id)
             delivered_packages.add(package)
         return delivered_packages
+
+    def is_package_on_truck(self, package):
+        return self._locate_package(package_id=package.package_id) != -1
+
 

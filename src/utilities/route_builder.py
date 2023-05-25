@@ -198,9 +198,10 @@ def _analyze_route_run(index_number: int, run: RouteRun):
     visited_locations = list()
     for i, location in enumerate(run.ordered_route):
         if location.is_hub:
+            visited_locations.append(location)
             continue
+        location_dict = run.run_analysis_dict[(visited_locations[-1], location)]
         if location in visited_locations:
-            location_dict = run.run_analysis_dict[(location, visited_locations[-1])]
             UI.print(f'Expected arrival time is {location_dict[RunInfo.ESTIMATED_TIME]} | ' +
                      f'Mileage from the previous location is '
                      f'{location_dict[RunInfo.PREVIOUS_LOCATION].distance(location)} miles | '
@@ -208,7 +209,6 @@ def _analyze_route_run(index_number: int, run: RouteRun):
                      f'\nReturning to {location.name} to minimize mileage | No packages delivered',
                      color=Color.RED, sleep_seconds=3, extra_lines=1)
         else:
-            location_dict = run.run_analysis_dict[location]
             UI.print((f'Expected arrival time is {location_dict[RunInfo.ESTIMATED_TIME]} | '
                       f'Mileage from the previous location is '
                       f'{location_dict[RunInfo.PREVIOUS_LOCATION].distance(location)} miles | '
