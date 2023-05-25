@@ -28,6 +28,23 @@ class RouteRun:
         self._error_location = None
         self._error_type = None
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.start_time == other.start_time
+        return NotImplemented
+
+    def __lt__(self, other):
+        if isinstance(other, self.__class__):
+            return self.start_time < other.start_time
+        return NotImplemented
+
+    def __gt__(self, other):
+        if isinstance(other, self.__class__):
+            return self.start_time > other.start_time
+        return NotImplemented
+
+    def __hash__(self):
+        return hash((self.start_time, self.estimated_completion_time))
 
     @property
     def ordered_route(self):
@@ -202,3 +219,4 @@ class RouteRun:
 
     def unconfirmed_location_total(self):
         return len([location for location in self.ordered_route if location.has_unconfirmed_package])
+

@@ -1,9 +1,6 @@
-import re
 from copy import copy
 from datetime import time
 from typing import List, Set
-
-__all__ = ['PackageHandler']
 
 from src import config
 from src.constants.delivery_status import DeliveryStatus
@@ -13,6 +10,8 @@ from src.models.truck import Truck
 from src.utilities.csv_parser import CsvParser
 from src.utilities.custom_hash import CustomHash
 from src.utilities.time_conversion import TimeConversion
+
+__all__ = ['PackageHandler']
 
 
 def _is_loadable_package_set(truck: Truck, in_package_set: Set[Package]) -> bool:
@@ -99,63 +98,11 @@ class PackageHandler:
         return PackageHandler.get_location_package_dict(in_packages)[location]
 
     @staticmethod
-    def get_all_packages_at_bundled_locations(bundled_packages, in_packages=all_packages):
-        bundled_set_dict = dict()
-        for package in bundled_packages:
-            if package.location not in bundled_set_dict.keys():
-                all_packages_at_location = PackageHandler.get_location_packages(package.location, in_packages)
-                bundled_set_dict[package.location] = all_packages_at_location
-        return bundled_set_dict
-
-    @staticmethod
     def is_delivered_on_time(current_time: time, packages: Set[Package]):
         for package in packages:
             if not TimeConversion.is_time_at_or_before_other_time(current_time, package.deadline):
                 print(f'Package id{package.package_id} was delivered late at {current_time}')
 
-    @staticmethod
-    def get_bundled_package_ids(packages: List[Package]):
-        return PackageHandler.get_special_note_bundles('Must be delivered with ', packages)
-
-    @staticmethod
-    def unionize_bundled_sets(bundled_sets):
-        i = 0
-        while i < len(bundled_sets):
-            current_set = bundled_sets[i]
-            intersecting_sets = [bundle for bundle in bundled_sets[i + 1:] if current_set.intersection(bundle)]
-            if intersecting_sets:
-                for intersecting_set in intersecting_sets:
-                    current_set = current_set.union(intersecting_set)
-                    bundled_sets.remove(intersecting_set)
-                bundled_sets[i] = current_set
-            i += 1
-
-    @staticmethod
-    def get_special_note_bundles(starting_pattern: str, packages=all_packages):
-        bundle_map = {}
-        for package in packages:
-            if str(package.special_note).startswith(starting_pattern):
-                special_note = package.special_note
-                pattern = r'\d+'
-                package_ids = [int(match) for match in re.findall(pattern, special_note)]
-                bundle_map[package.package_id] = package_ids
-        return bundle_map
-
-    # @staticmethod
-    # def get_bundled_packages(packages=all_packages) -> List[Set[Package]]:
-    #     custom_hash = CustomHash(config.NUM_TRUCK_CAPACITY)
-    #     custom_hash.add_all_packages(packages)
-    #     bundle_map = PackageHandler.get_bundled_package_ids(packages)
-    #     package_bundle_sets = []
-    #     for package_id in bundle_map.keys():
-    #         bundle_set = set()
-    #         bundle_set.add(custom_hash.get_package(package_id))
-    #         for bundled_package_id in bundle_map[package_id]:
-    #             bundle_set.add(custom_hash.get_package(bundled_package_id))
-    #         package_bundle_sets.append(bundle_set)
-    #     PackageHandler.unionize_bundled_sets(package_bundle_sets)
-    #     return package_bundle_sets    \
-    #
     @staticmethod
     def get_bundled_packages(locations=all_locations, all_location_packages=False, ignore_assigned=False) -> Set[Package]:
         package_bundle_set = set()
@@ -207,10 +154,6 @@ class PackageHandler:
         return truck_packages
 
     @staticmethod
-    def subtract_package_set(packages_to_remove: Set[Package], original_packages_set: Set[Package]):
-        return original_packages_set.difference(packages_to_remove)
-
-    @staticmethod
     def get_all_expected_status_update_times(special_times=None, start_time=config.PACKAGE_ARRIVAL_STATUS_UPDATE_TIME,
                                              end_time=config.DELIVERY_RETURN_TIME, in_locations=all_locations):
         status_updates_times = set()
@@ -246,40 +189,6 @@ class PackageHandler:
             if not ignore_assigned or not package.location.been_assigned:
                 locations.add(package.location)
         return locations
-
-    @staticmethod
-    def get_all_packages_from_locations(in_locations=all_locations, in_location: Location = None, ignore_route=False):
-        out_packages = set()
-        if in_location:
-            out_packages.union(in_location.package_set)
-        else:
-            for location in in_locations:
-                if not location.is_hub:
-                    out_packages = out_packages.union(location.package_set)
-        if ignore_route:
-            for package in out_packages:
-                if package.location.been_routed:
-                    out_packages.remove(package)
-        return out_packages
-
-    @staticmethod
-    def get_closest_packages(origin_location: Location, minimum=1, ignore_delayed_locations=False,
-                             ignore_early_deadline_locations=False, ignore_assigned=False):
-        locations_distance_sorted = sorted(origin_location.distance_dict.items(), key=lambda item: item[1])
-        closest_packages = set()
-        if not origin_location.been_assigned:
-            closest_packages.update(origin_location.package_set)
-        for i in range(len(locations_distance_sorted)):
-            next_closest_location = locations_distance_sorted[i][0]
-            if (ignore_early_deadline_locations and next_closest_location.earliest_deadline != config.DELIVERY_RETURN_TIME) or (
-                    (ignore_delayed_locations and next_closest_location.latest_package_arrival != config.STANDARD_PACKAGE_ARRIVAL_TIME) or (
-                    (ignore_assigned and next_closest_location.been_assigned))):
-                continue
-            if minimum <= len(closest_packages):
-                return closest_packages
-            if not next_closest_location.been_assigned:
-                closest_packages = closest_packages.union(PackageHandler.get_location_packages(next_closest_location))
-        return closest_packages
 
     @staticmethod
     def get_assigned_truck_id(in_location: Location):

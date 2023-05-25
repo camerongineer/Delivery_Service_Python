@@ -1,11 +1,10 @@
 from typing import final
 
-
-__all__ = ['CustomHash']
-
 from src import config
 from src.constants.delivery_status import DeliveryStatus
 from src.models.package import Package
+
+__all__ = ['CustomHash']
 
 
 class CustomHash:

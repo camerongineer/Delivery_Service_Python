@@ -1,9 +1,8 @@
 from enum import Enum
 
+from src.constants.states import State
 
 __all__ = ['UtahCity']
-
-from src.constants.states import State
 
 
 class UtahCity(Enum):

@@ -39,12 +39,11 @@ class TestCsvParser(TestCase):
                    TimeConversion.get_datetime(package.hub_arrival_time)
             assert package in package.location
 
-
-
     def test_initialize_locations(self):
         hubs = 0
         for location in self.locations:
             if location.is_hub:
+                assert location.been_assigned
                 hubs += 1
             assert location.name and isinstance(location.name, str)
             assert location.address and isinstance(location.address, str)

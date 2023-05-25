@@ -2,7 +2,6 @@ import csv
 import re
 from copy import copy
 from datetime import datetime, time
-from functools import reduce
 from typing import List, Set
 
 from src import config
@@ -11,10 +10,9 @@ from src.constants.utah_cities import UtahCity
 from src.models.location import Location
 from src.models.package import Package
 from src.models.truck import Truck
+from src.utilities.time_conversion import TimeConversion
 
 __all__ = ['CsvParser']
-
-from src.utilities.time_conversion import TimeConversion
 
 
 def _set_arrival_time(package: Package):
@@ -137,6 +135,7 @@ class CsvParser:
                     for utah_city in UtahCity:
                         if utah_city.displayed_name == city:
                             location.city = utah_city
+                            location.state = utah_city.state
                             break
                     location.zip_code = int(zip_code)
                 locations.append(location)
@@ -156,6 +155,7 @@ class CsvParser:
                     locations[i].set_location_as_hub()
                     Truck.hub_location = locations[i]
                     locations[i].hub_distance = 0
+                    locations[i].been_assigned = True
                 zip_match = re.search(r'\((\d+)\)', address_zip_rows[i])
                 if zip_match:
                     zip_code = int(zip_match.group(1))
@@ -190,6 +190,8 @@ class CsvParser:
                     if location.address == address and location.zip_code == zip_code:
                         package_location = location
                         package_location.city = city
+                        if not location.state:
+                            location.state = package_location.city.state
                         break
                 if not package_location:
                     raise ImportError

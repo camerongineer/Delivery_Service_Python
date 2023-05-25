@@ -3,12 +3,6 @@ from datetime import datetime, time, timedelta
 from src import config
 
 
-# def _get_seconds_since_midnight(in_time: time) -> float:
-#     in_datetime = TimeConversion.get_datetime(in_time)
-#     midnight = TimeConversion.get_datetime(time.min)
-#     return (in_datetime - midnight).total_seconds()
-
-
 class TimeConversion:
     @staticmethod
     def convert_time_difference_to_miles(start_time: time, end_time: time, miles_per_hour=config.DELIVERY_TRUCK_MPH) -> float:
@@ -57,3 +51,8 @@ class TimeConversion:
     def add_time_delta(start_time: time, time_seconds: int):
         return (TimeConversion.get_datetime(start_time) + timedelta(seconds=time_seconds)).time()
 
+    @staticmethod
+    def seconds_between_times(origin_time, target_time):
+        time_difference = TimeConversion.get_datetime(target_time) - TimeConversion.get_datetime(origin_time)
+        seconds = time_difference.total_seconds()
+        return seconds

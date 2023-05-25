@@ -6,8 +6,9 @@ from src import config
 from src.constants.delivery_status import DeliveryStatus
 from src.constants.run_focus import RunFocus
 from src.constants.run_info import RunInfo
-from src.exceptions.route_builder_error import BundledPackageTruckAssignmentError, InvalidRouteRunError, \
-    OptimalHubReturnError, PackageNotArrivedError, UnconfirmedPackageDeliveryError, LateDeliveryError
+from src.exceptions.route_builder_error import (BundledPackageTruckAssignmentError, InvalidRouteRunError,
+                                                OptimalHubReturnError, PackageNotArrivedError,
+                                                UnconfirmedPackageDeliveryError, LateDeliveryError)
 from src.models.location import Location
 from src.models.route_run import RouteRun
 from src.models.truck import Truck
@@ -15,11 +16,14 @@ from src.utilities.package_handler import PackageHandler
 from src.utilities.time_conversion import TimeConversion
 
 
+__all__ = ['RunPlanner']
+
+
 def _is_valid_fill_in(run: RouteRun, fill_in: Location):
     if ((not any([location.has_bundled_package for location in run.ordered_route]) and fill_in.has_bundled_package) or
             _in_close_proximity_to_locations(fill_in, _get_delayed_locations(run), distance=.75) or
             _in_close_proximity_to_locations(fill_in, _get_assigned_truck_locations(run), distance=.75) or
-            _in_close_proximity_to_locations(fill_in, _get_unconfirmed_locations(run), distance=2.9) or
+            _in_close_proximity_to_locations(fill_in, _get_unconfirmed_locations(run), distance=3) or
             fill_in in run.ordered_route):
         return False
     return True
@@ -55,22 +59,6 @@ def _fill_in(run: RouteRun, allowable_extra_mileage=3.5):
                     continue
             break
     return best_fill_in_index, best_fill_in
-
-
-def _combine_closest_packages(run: RouteRun, closest_location: Location, next_closest_location: Location, minimum: int):
-    combine_packages = PackageHandler.get_closest_packages(run.target_location, minimum=minimum, ignore_assigned=True)
-    if len(combine_packages.intersection(PackageHandler.get_bundled_packages(ignore_assigned=True))) > 3:
-        combine_packages.update(PackageHandler.get_bundled_packages(ignore_assigned=True))
-    closest_packages = PackageHandler.get_closest_packages(closest_location, minimum=minimum, ignore_assigned=True)
-    next_closest_packages = PackageHandler.get_closest_packages(next_closest_location, minimum=minimum,
-                                                                ignore_assigned=True)
-    combine_packages.update(closest_packages.union(next_closest_packages))
-    combine_packages_copy = copy(combine_packages)
-    for package in combine_packages_copy:
-        if (package.location not in _get_available_locations(current_time=run.start_time, ignore_assigned=True) or
-                (package.location.assigned_truck_id and package.assigned_truck_id != run.assigned_truck_id)):
-            combine_packages.remove(package)
-    return combine_packages
 
 
 def _combine_closest_locations(run: RouteRun, closest_location, next_closest_location, minimum):
@@ -124,7 +112,8 @@ def _get_focused_targets(run: RouteRun, minimum=8):
             PackageHandler.get_assigned_truck_packages(truck_id=run.assigned_truck_id), ignore_assigned=True))
 
     if len(run.locations) < minimum and run.package_total() <= config.NUM_TRUCK_CAPACITY:
-        highest_sum_of_miles_sorted_locations = (sorted(run.locations, key=lambda _location: sum(_location.distance_dict.values())))
+        highest_sum_of_miles_sorted_locations = (sorted(run.locations,
+                                                        key=lambda _location: sum(_location.distance_dict.values())))
         if highest_sum_of_miles_sorted_locations:
             best_target = highest_sum_of_miles_sorted_locations.pop()
             if best_target is run.target_location:
@@ -135,12 +124,11 @@ def _get_focused_targets(run: RouteRun, minimum=8):
             _combine_closest_locations(run, best_target, next_best_target, minimum)
 
 
-def _get_optimized_run(run: RouteRun, minimum=8):
-    fill_in_max_mileage = 3
-
+def _get_optimized_run(run: RouteRun, minimum=config.CLOSEST_NEIGHBOR_MINIMUM):
+    fill_in_max_mileage = config.FILL_IN_INSERTION_ALLOWANCE
     if run.focused_run:
         _get_focused_targets(run)
-        fill_in_max_mileage = 2
+        fill_in_max_mileage = fill_in_max_mileage * .5
     else:
         closest_neighbor, next_closest_neighbor = _get_closest_neighbors(run)
         _combine_closest_locations(run, closest_neighbor, next_closest_neighbor, minimum)
@@ -164,6 +152,20 @@ def _get_optimized_run(run: RouteRun, minimum=8):
 
     run.locations = set(run.ordered_route)
     run.locations.remove(Truck.hub_location)
+
+
+def _is_valid_option(run: RouteRun, location: Location, alternate_locations: Set[Location] = None) -> bool:
+    available_location_pool = _get_available_locations(run.start_time)
+    if alternate_locations:
+        estimated_package_total = run.package_total(alternate_locations.union({location}))
+    else:
+        estimated_package_total = run.package_total(run.locations.union({location}))
+    if (location.is_hub or location not in available_location_pool or
+            estimated_package_total > config.NUM_TRUCK_CAPACITY or
+            ((location.assigned_truck_id is not None and run.assigned_truck_id is not None) and
+             (location.assigned_truck_id != run.assigned_truck_id))):
+        return False
+    return True
 
 
 def _two_opt(run: RouteRun, in_location: Location):
@@ -273,33 +275,6 @@ def _optimized_revisit(run: RouteRun, run_analysis_dict):
     run.run_analysis_dict = run_analysis_dict
 
 
-def _is_valid_option(run: RouteRun, location: Location, alternate_locations: Set[Location] = None) -> bool:
-    available_location_pool = _get_available_locations(run.start_time)
-    if alternate_locations:
-        estimated_package_total = run.package_total(alternate_locations.union({location}))
-    else:
-        estimated_package_total = run.package_total(run.locations.union({location}))
-    if (location.is_hub or location not in available_location_pool or
-            estimated_package_total > config.NUM_TRUCK_CAPACITY or
-            ((location.assigned_truck_id is not None and run.assigned_truck_id is not None) and
-             (location.assigned_truck_id != run.assigned_truck_id))):
-        return False
-    return True
-
-
-def _is_valid_best_option(run, location: Location, other_location=None) -> bool:
-    if other_location:
-        locations_for_package_total = [location] if not other_location else [location, other_location]
-        estimated_package_total = _get_estimated_required_package_total(run.ordered_route + locations_for_package_total)
-        if estimated_package_total > config.NUM_TRUCK_CAPACITY:
-            return False
-    if (location not in run.locations or location is other_location or location in run.ordered_route or
-            _in_close_proximity_to_locations(location, _get_delayed_locations(run)) or
-            _in_close_proximity_to_locations(location, _get_assigned_truck_locations(run))):
-        return False
-    return True
-
-
 def _in_close_proximity_of_undeliverable(run, in_location: Location) -> bool:
     undeliverable_locations = get_undeliverable_locations(run)
     for location in undeliverable_locations:
@@ -379,12 +354,8 @@ def _set_locations_as_assigned(run: RouteRun):
 
 
 def _set_assigned_truck_id_to_bundle_packages(run):
-    try:
-        if not run.assigned_truck_id:
-            raise BundledPackageTruckAssignmentError
-    except BundledPackageTruckAssignmentError:
-        truck_id = 1
-        run.assigned_truck_id = truck_id
+    if not run.assigned_truck_id:
+        raise BundledPackageTruckAssignmentError
     for location in run.ordered_route:
         if location.has_bundled_package:
             if location.assigned_truck_id and location.assigned_truck_id != run.assigned_truck_id:
@@ -445,6 +416,9 @@ def _get_run_analysis_dict(run: RouteRun):
         packages_delivered += list(location.package_set) if isinstance(insert_location, Location) else []
         estimated_mileage = run.get_estimated_mileage_at_location(index=i)
         estimated_time = TimeConversion.convert_miles_to_time(estimated_mileage, start_time=run.start_time)
+        estimated_mileage_at_next = run.get_estimated_mileage_at_location(index=i + 1) if next_location else None
+        estimated_time_at_next = TimeConversion.convert_miles_to_time(
+            estimated_mileage_at_next, start_time=run.start_time) if next_location else None
         if not latest_arrival_time or not _is_earlier_time(location.latest_package_arrival, latest_arrival_time):
             latest_arrival_time = location.latest_package_arrival
         departure_requirement_met = _is_earlier_time(location.latest_package_arrival, run.start_time)
@@ -485,6 +459,8 @@ def _get_run_analysis_dict(run: RouteRun):
             RunInfo.MILES_TO_NEXT: next_distance,
             RunInfo.ESTIMATED_MILEAGE: estimated_mileage,
             RunInfo.ESTIMATED_TIME: estimated_time,
+            RunInfo.ESTIMATED_MILEAGE_AT_NEXT: estimated_mileage_at_next,
+            RunInfo.ESTIMATED_TIME_AT_NEXT: estimated_time_at_next,
             RunInfo.LATEST_ALLOWED_DELIVERY_TIME: copy(location.earliest_deadline),
             RunInfo.LATEST_ALLOWED_HUB_DEPARTURE: copy(location.latest_package_arrival),
             RunInfo.UNDELIVERED_PACKAGES_TOTAL: undelivered_package_total,
@@ -515,7 +491,8 @@ def _simulate_load(run: RouteRun, truck: Truck):
             truck.add_package(package)
             if package.bundled_package_set:
                 for bundle_package in package.bundled_package_set:
-                    truck.add_package(bundle_package)
+                    if not bundle_package.location.been_assigned:
+                        truck.add_package(bundle_package)
     run.required_packages = truck.unload()
 
 
@@ -540,7 +517,8 @@ def _check_optimal_return_to_hub(run: RouteRun):
             packages_delivered = (run.run_analysis_dict[previous_location][RunInfo.PACKAGES_DELIVERED]
                                   if not previous_location.is_hub else set())
             try:
-                if 0 < mileage_difference <= config.HUB_RETURN_INSERTION_ALLOWANCE and len(packages_delivered) >= 8:
+                if (0 < mileage_difference <= config.HUB_RETURN_INSERTION_ALLOWANCE and len(packages_delivered) >=
+                        len(PackageHandler.all_packages) % config.NUM_TRUCK_CAPACITY):
                     raise OptimalHubReturnError
             except OptimalHubReturnError:
                 run.ordered_route = run.ordered_route[:i] + [Truck.hub_location]

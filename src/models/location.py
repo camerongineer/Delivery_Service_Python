@@ -4,6 +4,7 @@ from datetime import time
 
 from src import config
 from src.config import DELIVERY_RETURN_TIME
+from src.constants.states import State
 from src.constants.utah_cities import UtahCity
 from src.utilities.time_conversion import TimeConversion
 
@@ -13,6 +14,7 @@ class Location:
         self.name = name
         self.address = address
         self._city = None
+        self._state = None
         self._zip_code = None
         self.distance_dict = dict()
         self.package_set = set()
@@ -53,6 +55,10 @@ class Location:
         return self._city
 
     @property
+    def state(self):
+        return self._state
+
+    @property
     def zip_code(self):
         return self._zip_code
 
@@ -63,6 +69,10 @@ class Location:
     @city.setter
     def city(self, value: UtahCity):
         self._city = value
+
+    @state.setter
+    def state(self, value: State):
+        self._state = value
 
     @zip_code.setter
     def zip_code(self, value: int):
@@ -109,3 +119,6 @@ class Location:
         if self is other_location:
             return None
         return self.distance_dict[other_location]
+
+    def get_full_address(self):
+        return f'{self.address}, {self.city.displayed_name}, {self.state.abbreviation} {self.zip_code}'
