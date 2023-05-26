@@ -248,6 +248,7 @@ remaining capacity: {self._capacity - self._size}'''
             if not delivered_package:
                 raise PackageNotOnTruckError
             package.update_status(DeliveryStatus.DELIVERED, self.clock)
+            package.delivery_time = self.clock
             self.remove_package(package.package_id)
             delivered_packages.add(package)
         return delivered_packages

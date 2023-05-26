@@ -78,7 +78,7 @@ def _calculate_best_targets():
     minimum_runs = int(package_total / config.NUM_TRUCK_CAPACITY)
     if package_total % config.NUM_TRUCK_CAPACITY:
         minimum_runs += 1
-    UI.print(f'{package_total} packages detected, truck capacity is {truck_capacity}', sleep_seconds=2)
+    UI.print(f'\n\n{package_total} packages detected, truck capacity is {truck_capacity}', sleep_seconds=2)
     UI.print(f'A minimum of {minimum_runs} runs detected', extra_lines=1, sleep_seconds=2)
     UI.print('Calculating best target locations', think=True, extra_lines=1)
     UI.print('Searching for highest priority package locations', think=True, extra_lines=1)
@@ -191,7 +191,7 @@ def _unconfirmed_package_delivery_message():
 
 def _analyze_route_run(index_number: int, run: RouteRun):
     UI.print(f'Run #{index_number + 1} successfully built!', sleep_seconds=3, extra_lines=1, color=Color.YELLOW)
-    UI.print(f'The truck #{run.assigned_truck_id} is assigned, with an estimated departure time of {run.start_time}'
+    UI.print(f'Truck #{run.assigned_truck_id} is assigned, with an estimated departure time of {run.start_time}'
              f' and completion time of {run.estimated_completion_time}', extra_lines=1, sleep_seconds=3)
     UI.print(f'Analysing run #{index_number + 1} with target location: "{run.target_location.name}"',
              think=True, extra_lines=1)

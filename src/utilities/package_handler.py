@@ -30,8 +30,8 @@ def _is_package_arriving_at_hub(package: Package, current_time: time) -> bool:
 
 
 def _is_package_address_updating(package: Package, current_time: time) -> bool:
-    return TimeConversion.is_time_at_or_before_other_time(config.PACKAGE_9_ADDRESS_CHANGE_TIME, current_time) and \
-        not package.is_verified_address
+    return (TimeConversion.is_time_at_or_before_other_time(config.PACKAGE_9_ADDRESS_CHANGE_TIME, current_time) and
+            not package.is_verified_address)
 
 
 class PackageHandler:
@@ -54,7 +54,8 @@ class PackageHandler:
             return True
 
     @staticmethod
-    def update_delivery_location(locations_list: List[Location], package: Package, updated_address: str):
+    def update_delivery_location(current_time: time, locations_list: List[Location],
+                                 package: Package, updated_address: str):
         try:
             address, city, state_zip = updated_address.split(', ')
             zip_code = int(state_zip.split(' ')[1])
@@ -65,6 +66,8 @@ class PackageHandler:
                     package.location = location
                     package.location.package_set.add(package)
                     package.is_verified_address = True
+                    package.special_note = '\u001b[9m' + package.special_note + '\033[0m'
+                    package.update_status(package.status, current_time)
                     raise AddressUpdateException(package, old_location)
         except (ValueError, TypeError):
             return False
@@ -78,8 +81,8 @@ class PackageHandler:
                 package.update_status(DeliveryStatus.AT_HUB, current_time)
                 delayed_packages_arrived = True
             if _is_package_address_updating(package, current_time):
-                PackageHandler.update_delivery_location(PackageHandler.all_locations, package,
-                                                        config.PACKAGE_9_UPDATED_ADDRESS)
+                PackageHandler.update_delivery_location(current_time, PackageHandler.all_locations, package,
+                                                        config.EXCEPTED_UPDATES[package.package_id]['address'])
         if delayed_packages_arrived:
             raise DelayedPackagesArrivedException
 
@@ -219,3 +222,13 @@ class PackageHandler:
             if not package.is_verified_address:
                 unconfirmed_packages.add(package)
         return unconfirmed_packages
+
+    @staticmethod
+    def get_package_snapshot(package, target_time):
+        snapshot_package = copy(package)
+        update_time, snapshot_update = package.find_package_state_at_time(target_time)
+        snapshot_package.location = snapshot_update['location']
+        snapshot_package.status = snapshot_update['status']
+        snapshot_package.special_note = snapshot_update['special_note']
+        snapshot_package.is_verified_address = snapshot_update['is_verified_address']
+        return snapshot_package

@@ -2,9 +2,9 @@ from datetime import time, datetime
 
 from src.utilities.path_utils import PathUtils
 
-UI_ENABLED = False
+UI_ENABLED = True
 UI_ELEMENTS_ENABLED = True
-UI_SPEED = 500
+UI_SPEED = 100
 
 HUB_RETURN_INSERTION_ALLOWANCE = 2.5
 FILL_IN_INSERTION_ALLOWANCE = 3

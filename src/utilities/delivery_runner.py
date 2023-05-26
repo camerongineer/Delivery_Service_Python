@@ -19,8 +19,9 @@ from src.utilities.time_conversion import TimeConversion
 
 def _display_package_load_message(truck: Truck, run: RouteRun, package_id: int):
     package = truck.get_package(package_id)
-    UI.print(f'{truck.clock} | Package #{str(package_id).zfill(2)} | Destination: "{package.location.name}" at '
-             f'"{package.location.get_full_address()}" | Loaded successfully onto Truck #{truck.truck_id}' +
+    UI.print(f'{truck.clock} | Package #{str(package_id).zfill(2)} | Destination: "{package.location.name}" | Loaded '
+             f'successfully onto Truck #{truck.truck_id} | '
+             f'Packages currently loaded: {len(truck)} / {config.NUM_TRUCK_CAPACITY}' +
              ('\n** WILL NOT BE DELIVERED UNTIL AFTER RELOADING BUT IS REQUIRED TO BE CARRIED **'
               if package.location not in run.ordered_route else ''), sleep_seconds=2, color=Color.YELLOW)
 
@@ -47,9 +48,9 @@ def _display_delivery_info(truck: Truck, delivered_packages: Set[Package]):
                          if package.status is not DeliveryStatus.DELIVERED])
     UI.print(f'{truck.clock} | Truck #{truck.truck_id} | Current mileage:'
              f' {analysis_dict[RunInfo.ESTIMATED_MILEAGE]:.1f} | Packages have been delivered to'
-             f' "{truck.current_location.name}" | {len(delivered_packages)} total delivered, '
-             f'{analysis_dict[RunInfo.UNDELIVERED_PACKAGES_TOTAL]} remaining on truck | Daily remaining total: '
-             f'{(len(total_undelivered))} / {len(PackageHandler.all_packages)}',
+             f' "{truck.current_location.name}" | {len(delivered_packages)} delivered, '
+             f'{analysis_dict[RunInfo.UNDELIVERED_PACKAGES_TOTAL]} remaining on truck | '
+             f'{(len(total_undelivered))} / {len(PackageHandler.all_packages)} total remaining',
              sleep_seconds=3, color=UI.ASSIGNED_COLOR[truck.truck_id])
 
 
@@ -113,8 +114,6 @@ class DeliveryRunner:
 
     @staticmethod
     def load_trucks():
-        config.UI_ENABLED = True
-        config.UI_ELEMENTS_ENABLED = True
         trucks: List[Truck] = RouteBuilder.build_optimized_runs()
         _display_initial_truck_loading_message()
         unused_trucks = [truck for truck in trucks if not truck.route_runs]
@@ -142,11 +141,11 @@ class DeliveryRunner:
         completion_time = max([run.estimated_completion_time for run in DeliveryRunner.route_runs])
         DeliveryRunner.global_clock = copy(start_time)
         UI.print('Deliveries commencing', think=True, color=Color.MAGENTA)
-        UI.print(f'\nThe time is now {UI.UNDERLINE}{start_time}{Color.COLOR_ESCAPE.value[0]}',
+        UI.print(f'\nThe time is now {UI.UNDERLINE}{start_time}{Color.COLOR_ESCAPE.value}',
                  sleep_seconds=3, extra_lines=1)
         visited_locations = set()
         important_update_times = list(PackageHandler.get_all_expected_status_update_times())
-        important_update_times.append(config.PACKAGE_9_ADDRESS_CHANGE_TIME)
+        important_update_times += [times['update_time'] for times in config.EXCEPTED_UPDATES.values()]
         important_update_times.sort()
         while DeliveryRunner.route_runs and (DeliveryRunner.global_clock <= completion_time):
             important_time = None
@@ -226,5 +225,6 @@ class DeliveryRunner:
                      f' Total mileage: {total_mileage:.1f} | Completion time: {completion_time}',
                      color=Color.BRIGHT_GREEN)
 
-        UI.press_enter_to_continue()
+        UI.press_enter_to_continue(simulation_end=True)
+
 
