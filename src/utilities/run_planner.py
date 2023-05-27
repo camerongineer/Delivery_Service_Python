@@ -133,14 +133,14 @@ def _get_optimized_run(run: RouteRun, minimum=config.CLOSEST_NEIGHBOR_MINIMUM):
         closest_neighbor, next_closest_neighbor = _get_closest_neighbors(run)
         _combine_closest_locations(run, closest_neighbor, next_closest_neighbor, minimum)
 
-    next_location, following_location = _two_opt(run, run.ordered_route[0])
+    next_location, following_location = _two_closest(run, run.ordered_route[0])
     while next_location and following_location:
         run.ordered_route.append(next_location)
         run.ordered_route.append(following_location)
-        next_location, following_location = _two_opt(run, run.ordered_route[-1])
+        next_location, following_location = _two_closest(run, run.ordered_route[-1])
     while next_location and not following_location:
         run.ordered_route.append(next_location)
-        next_location, following_location = _two_opt(run, run.ordered_route[-1])
+        next_location, following_location = _two_closest(run, run.ordered_route[-1])
 
     if run.return_to_hub:
         run.ordered_route.append(Truck.hub_location)
@@ -168,7 +168,7 @@ def _is_valid_option(run: RouteRun, location: Location, alternate_locations: Set
     return True
 
 
-def _two_opt(run: RouteRun, in_location: Location):
+def _two_closest(run: RouteRun, in_location: Location):
     valid_options, secondary_options = dict(), dict()
     for first_location, first_distance in in_location.distance_dict.items():
         if first_location not in run.locations or first_location in run.ordered_route:
