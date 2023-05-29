@@ -3,7 +3,6 @@ from datetime import time
 from typing import Set
 
 from src import config
-from src.constants.delivery_status import DeliveryStatus
 from src.constants.run_focus import RunFocus
 from src.constants.run_info import RunInfo
 from src.exceptions.route_builder_error import (BundledPackageTruckAssignmentError, InvalidRouteRunError,
@@ -19,7 +18,152 @@ from src.utilities.time_conversion import TimeConversion
 __all__ = ['RunPlanner']
 
 
+def _best_closest_location(run, location: Location):
+    """
+    Find the best closest location based on the given location and run.
+
+    Args:
+        run (RouteRun): The route run.
+        location (Location): The current location.
+
+    Returns:
+        dict: A dictionary containing the best mileage and closest location.
+
+    Time Complexity: O(n log n)
+
+    Space Complexity: O(1).
+
+    """
+    distance_sorted_dict = sorted(location.distance_dict.items(), key=lambda _location: _location[1])
+    best_closest_location = None
+    best_mileage = None
+    for location, mileage in distance_sorted_dict:
+        if (not _is_valid_option(run, location) or location in run.locations or
+                _in_close_proximity_to_locations(location, _get_delayed_locations(run), distance=1) or
+                _in_close_proximity_to_locations(location, _get_assigned_truck_locations(run), distance=1)):
+            continue
+        if not best_mileage:
+            best_mileage = mileage
+            best_closest_location = location
+        elif mileage == best_mileage:
+            if ((location.has_required_truck_package and run.assigned_truck_id) and
+                    (location.assigned_truck_id == run.assigned_truck_id)):
+                best_closest_location = location
+        else:
+            break
+    return {best_mileage: best_closest_location} if best_mileage and best_closest_location else None
+
+
+def _combine_closest_locations(run: RouteRun, closest_location, next_closest_location, minimum):
+    """
+    Combine the closest locations with the run based on certain conditions.
+
+    Args:
+        run (RouteRun): The route run.
+        closest_location (Location): The closest location.
+        next_closest_location (Location): The next closest location.
+        minimum (int): The minimum number of locations to be combined.
+
+    Time Complexity: O(n)
+
+    Space Complexity: O(1)
+    """
+    unassigned_locations = [location for location in PackageHandler.all_locations if not location.been_assigned]
+    remaining_package_total = sum([len(location.package_set) for location in unassigned_locations])
+    if remaining_package_total <= config.NUM_TRUCK_CAPACITY:
+        run.locations.update(set(unassigned_locations))
+    else:
+        run.locations.update({run.target_location, closest_location, next_closest_location})
+        available_location_pool = _get_available_locations(run.start_time)
+        while len(run.locations) < minimum and len(run.locations) <= len(available_location_pool):
+            if any([_location for _location in run.locations if _location.has_bundled_package]):
+                bundle_locations = PackageHandler.get_package_locations(
+                    PackageHandler.get_bundled_packages(ignore_assigned=True))
+                run.locations.update(bundle_locations)
+            target_best = _best_closest_location(run, run.target_location)
+            closest_best = _best_closest_location(run, closest_location)
+            next_best = _best_closest_location(run, next_closest_location)
+            best_set = list(filter(lambda _location: _location is not None, [target_best, closest_best, next_best]))
+            if not best_set:
+                break
+            best_one = min(best_set, key=lambda d: min(d.keys()))
+            run.locations.add(best_one.popitem()[1])
+
+
+def _get_focused_targets(run: RouteRun, minimum=8):
+    """
+    Get the focused targets for the route run based on the run's focus and other conditions.
+
+    Args:
+        run (RouteRun): The route run.
+        minimum (int, optional): The minimum number of locations. Defaults to 8.
+
+    Time Complexity: O(n log n)
+
+    Space Complexity: O(1)
+    """
+    if run.focused_run is RunFocus.ASSIGNED_TRUCK:
+        run.locations.add(run.target_location)
+        run.locations.update(PackageHandler.get_package_locations(
+            PackageHandler.get_assigned_truck_packages(truck_id=run.assigned_truck_id), ignore_assigned=True))
+
+    if len(run.locations) < minimum and run.package_total() <= config.NUM_TRUCK_CAPACITY:
+        highest_sum_of_miles_sorted_locations = (sorted(run.locations,
+                                                        key=lambda _location: sum(_location.distance_dict.values())))
+        if highest_sum_of_miles_sorted_locations:
+            best_target = highest_sum_of_miles_sorted_locations.pop()
+            if best_target is run.target_location:
+                best_target = highest_sum_of_miles_sorted_locations.pop()
+            next_best_target = highest_sum_of_miles_sorted_locations.pop()
+            if next_best_target is run.target_location:
+                next_best_target = highest_sum_of_miles_sorted_locations.pop()
+            _combine_closest_locations(run, best_target, next_best_target, minimum)
+
+
+def _is_valid_option(run: RouteRun, location: Location, alternate_locations: Set[Location] = None) -> bool:
+    """
+    Check if a location is a valid option for inclusion in the run based on certain conditions.
+
+    Args:
+        run (RouteRun): The route run.
+        location (Location): The location to check.
+        alternate_locations (Set[Location], optional): Alternate locations to consider along with the run's current locations. Defaults to None.
+
+    Returns:
+        bool: True if the location is a valid option, False otherwise.
+
+    Time Complexity: O(n)
+
+    Space Complexity: O(1)
+    """
+    available_location_pool = _get_available_locations(run.start_time)
+    if alternate_locations:
+        estimated_package_total = run.package_total(alternate_locations.union({location}))
+    else:
+        estimated_package_total = run.package_total(run.locations.union({location}))
+    if (location.is_hub or location not in available_location_pool or
+            estimated_package_total > config.NUM_TRUCK_CAPACITY or
+            ((location.assigned_truck_id is not None and run.assigned_truck_id is not None) and
+             (location.assigned_truck_id != run.assigned_truck_id))):
+        return False
+    return True
+
+
 def _is_valid_fill_in(run: RouteRun, fill_in: Location):
+    """
+    Check if a location is a valid fill-in option for the run based on certain conditions.
+
+    Args:
+        run (RouteRun): The route run.
+        fill_in (Location): The location to check.
+
+    Returns:
+        bool: True if the location is a valid fill-in option, False otherwise.
+
+    Time Complexity: O(n)
+
+    Space Complexity: O(1)
+    """
     if ((not any([location.has_bundled_package for location in run.ordered_route]) and fill_in.has_bundled_package) or
             _in_close_proximity_to_locations(fill_in, _get_delayed_locations(run), distance=.75) or
             _in_close_proximity_to_locations(fill_in, _get_assigned_truck_locations(run), distance=.75) or
@@ -30,6 +174,20 @@ def _is_valid_fill_in(run: RouteRun, fill_in: Location):
 
 
 def _fill_in(run: RouteRun, allowable_extra_mileage=3.5):
+    """
+    Fill in the route run with additional locations based on certain conditions.
+
+    Args:
+        run (RouteRun): The route run.
+        allowable_extra_mileage (float, optional): The allowable extra mileage for fill-in locations. Defaults to 3.5.
+
+    Returns:
+        Tuple[int, Location]: The index and location of the best fill-in option.
+
+    Time Complexity: O(n^3)
+
+    Space Complexity: O(1)
+    """
     best_fill_in_mileage = None
     best_fill_in = None
     best_fill_in_index = None
@@ -61,114 +219,21 @@ def _fill_in(run: RouteRun, allowable_extra_mileage=3.5):
     return best_fill_in_index, best_fill_in
 
 
-def _combine_closest_locations(run: RouteRun, closest_location, next_closest_location, minimum):
-    unassigned_locations = [location for location in PackageHandler.all_locations if not location.been_assigned]
-    remaining_package_total = sum([len(location.package_set) for location in unassigned_locations])
-    if remaining_package_total <= config.NUM_TRUCK_CAPACITY:
-        run.locations.update(set(unassigned_locations))
-    else:
-        run.locations.update({run.target_location, closest_location, next_closest_location})
-        available_location_pool = _get_available_locations(run.start_time)
-        while len(run.locations) < minimum and len(run.locations) <= len(available_location_pool):
-            if any([_location for _location in run.locations if _location.has_bundled_package]):
-                bundle_locations = PackageHandler.get_package_locations(
-                    PackageHandler.get_bundled_packages(ignore_assigned=True))
-                run.locations.update(bundle_locations)
-            target_best = _best_closest_location(run, run.target_location)
-            closest_best = _best_closest_location(run, closest_location)
-            next_best = _best_closest_location(run, next_closest_location)
-            best_set = list(filter(lambda _location: _location is not None, [target_best, closest_best, next_best]))
-            if not best_set:
-                break
-            best_one = min(best_set, key=lambda d: min(d.keys()))
-            run.locations.add(best_one.popitem()[1])
-
-
-def _best_closest_location(run, location: Location):
-    distance_sorted_dict = sorted(location.distance_dict.items(), key=lambda _location: _location[1])
-    best_closest_location = None
-    best_mileage = None
-    for location, mileage in distance_sorted_dict:
-        if (not _is_valid_option(run, location) or location in run.locations or
-                _in_close_proximity_to_locations(location, _get_delayed_locations(run), distance=1) or
-                _in_close_proximity_to_locations(location, _get_assigned_truck_locations(run), distance=1)):
-            continue
-        if not best_mileage:
-            best_mileage = mileage
-            best_closest_location = location
-        elif mileage == best_mileage:
-            if ((location.has_required_truck_package and run.assigned_truck_id) and
-                    (location.assigned_truck_id == run.assigned_truck_id)):
-                best_closest_location = location
-        else:
-            break
-    return {best_mileage: best_closest_location} if best_mileage and best_closest_location else None
-
-
-def _get_focused_targets(run: RouteRun, minimum=8):
-    if run.focused_run is RunFocus.ASSIGNED_TRUCK:
-        run.locations.add(run.target_location)
-        run.locations.update(PackageHandler.get_package_locations(
-            PackageHandler.get_assigned_truck_packages(truck_id=run.assigned_truck_id), ignore_assigned=True))
-
-    if len(run.locations) < minimum and run.package_total() <= config.NUM_TRUCK_CAPACITY:
-        highest_sum_of_miles_sorted_locations = (sorted(run.locations,
-                                                        key=lambda _location: sum(_location.distance_dict.values())))
-        if highest_sum_of_miles_sorted_locations:
-            best_target = highest_sum_of_miles_sorted_locations.pop()
-            if best_target is run.target_location:
-                best_target = highest_sum_of_miles_sorted_locations.pop()
-            next_best_target = highest_sum_of_miles_sorted_locations.pop()
-            if next_best_target is run.target_location:
-                next_best_target = highest_sum_of_miles_sorted_locations.pop()
-            _combine_closest_locations(run, best_target, next_best_target, minimum)
-
-
-def _get_optimized_run(run: RouteRun, minimum=config.CLOSEST_NEIGHBOR_MINIMUM):
-    fill_in_max_mileage = config.FILL_IN_INSERTION_ALLOWANCE
-    if run.focused_run:
-        _get_focused_targets(run)
-        fill_in_max_mileage = fill_in_max_mileage * .5
-    else:
-        closest_neighbor, next_closest_neighbor = _get_closest_neighbors(run)
-        _combine_closest_locations(run, closest_neighbor, next_closest_neighbor, minimum)
-
-    next_location, following_location = _two_closest(run, run.ordered_route[0])
-    while next_location and following_location:
-        run.ordered_route.append(next_location)
-        run.ordered_route.append(following_location)
-        next_location, following_location = _two_closest(run, run.ordered_route[-1])
-    while next_location and not following_location:
-        run.ordered_route.append(next_location)
-        next_location, following_location = _two_closest(run, run.ordered_route[-1])
-
-    if run.return_to_hub:
-        run.ordered_route.append(Truck.hub_location)
-
-    fill_in_index, fill_in = _fill_in(run, allowable_extra_mileage=fill_in_max_mileage)
-    while fill_in_index:
-        run.ordered_route.insert(fill_in_index, fill_in)
-        fill_in_index, fill_in = _fill_in(run, allowable_extra_mileage=fill_in_max_mileage)
-
-    run.locations = set(run.ordered_route)
-    run.locations.remove(Truck.hub_location)
-
-
-def _is_valid_option(run: RouteRun, location: Location, alternate_locations: Set[Location] = None) -> bool:
-    available_location_pool = _get_available_locations(run.start_time)
-    if alternate_locations:
-        estimated_package_total = run.package_total(alternate_locations.union({location}))
-    else:
-        estimated_package_total = run.package_total(run.locations.union({location}))
-    if (location.is_hub or location not in available_location_pool or
-            estimated_package_total > config.NUM_TRUCK_CAPACITY or
-            ((location.assigned_truck_id is not None and run.assigned_truck_id is not None) and
-             (location.assigned_truck_id != run.assigned_truck_id))):
-        return False
-    return True
-
-
 def _two_closest(run: RouteRun, in_location: Location):
+    """
+    Find the two closest locations to the given location.
+
+    Args:
+        run (RouteRun): The route run.
+        in_location (Location): The input location.
+
+    Returns:
+        Tuple[Location, Location]: The two closest locations.
+
+    Time Complexity: O(n^2)
+    Space Complexity: O(n)
+    """
+
     valid_options, secondary_options = dict(), dict()
     for first_location, first_distance in in_location.distance_dict.items():
         if first_location not in run.locations or first_location in run.ordered_route:
@@ -192,6 +257,21 @@ def _two_closest(run: RouteRun, in_location: Location):
 
 
 def _best_option(run: RouteRun, valid_options: dict, secondary_options: dict):
+    """
+    Find the best option from the valid options and secondary options.
+
+    Args:
+        run (RouteRun): The route run.
+        valid_options (dict): Valid options dictionary.
+        secondary_options (dict): Secondary options dictionary.
+
+    Returns:
+        Tuple[Location, Location]: The best option pair.
+
+    Time Complexity: O(n log n)
+    Space Complexity: O(n)
+    """
+
     if not valid_options and not secondary_options:
         return None, None
     if not valid_options:
@@ -223,7 +303,94 @@ def _best_option(run: RouteRun, valid_options: dict, secondary_options: dict):
     return first_location, second_location
 
 
+def _get_closest_neighbors(run: RouteRun):
+    """
+    Get the closest and next closest neighbors of the target location.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Returns:
+        Tuple[Location, Location]: The closest and next closest locations.
+
+    Time Complexity: O(n)
+    Space Complexity: O(1)
+    """
+
+    sorted_location_dict = sorted(run.target_location.distance_dict.items(), key=lambda _location: _location[1])
+    closest_location = None
+    for location, distance in sorted_location_dict:
+        if (_is_valid_option(run, location, ) and
+                not _in_close_proximity_to_locations(location, _get_delayed_locations(run), distance=2.5)):
+            closest_location = location
+            break
+    next_closest_location = None
+    for location, distance in sorted_location_dict:
+        if (location is not closest_location and _is_valid_option(run, location, ) and
+                not _in_close_proximity_to_locations(location, _get_delayed_locations(run), distance=2.5)):
+            next_closest_location = location
+            break
+    return closest_location, next_closest_location
+
+
+def _get_optimized_run(run: RouteRun, minimum=config.CLOSEST_NEIGHBOR_MINIMUM):
+    """
+    Get the optimized route run by combining the closest locations and filling in gaps.
+
+    Args:
+        run (RouteRun): The route run.
+        minimum (int): The minimum number of locations to be combined.
+
+    Time Complexity: O(n^2)
+    Space Complexity: O(n)
+    """
+
+    fill_in_max_mileage = config.FILL_IN_INSERTION_ALLOWANCE
+    if run.focused_run:
+        _get_focused_targets(run)
+        fill_in_max_mileage = fill_in_max_mileage * .5
+    else:
+        closest_neighbor, next_closest_neighbor = _get_closest_neighbors(run)
+        _combine_closest_locations(run, closest_neighbor, next_closest_neighbor, minimum)
+
+    next_location, following_location = _two_closest(run, run.ordered_route[0])
+    while next_location and following_location:
+        run.ordered_route.append(next_location)
+        run.ordered_route.append(following_location)
+        next_location, following_location = _two_closest(run, run.ordered_route[-1])
+    while next_location and not following_location:
+        run.ordered_route.append(next_location)
+        next_location, following_location = _two_closest(run, run.ordered_route[-1])
+
+    if run.return_to_hub:
+        run.ordered_route.append(Truck.hub_location)
+
+    fill_in_index, fill_in = _fill_in(run, allowable_extra_mileage=fill_in_max_mileage)
+    while fill_in_index:
+        run.ordered_route.insert(fill_in_index, fill_in)
+        fill_in_index, fill_in = _fill_in(run, allowable_extra_mileage=fill_in_max_mileage)
+
+    run.locations = set(run.ordered_route)
+    run.locations.remove(Truck.hub_location)
+
+
 def _is_valid_insert(previous_location: Location, location: Location, insert_location: Location, run_analysis_dict):
+    """
+    Check if inserting a location between previous_location and location is valid.
+
+    Args:
+        previous_location (Location): The previous location.
+        location (Location): The current location.
+        insert_location (Location): The location to be inserted.
+        run_analysis_dict (dict): The run analysis dictionary.
+
+    Returns:
+        bool: True if the insert is valid, False otherwise.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     next_location = run_analysis_dict[(previous_location, location)][RunInfo.NEXT_LOCATION]
     miles_from_previous = run_analysis_dict[(previous_location, location)][RunInfo.MILES_FROM_PREVIOUS]
     miles_to_next = run_analysis_dict[(previous_location, location)][RunInfo.MILES_TO_NEXT] if next_location else 0
@@ -238,6 +405,16 @@ def _is_valid_insert(previous_location: Location, location: Location, insert_loc
 
 
 def _optimized_revisit(run: RouteRun):
+    """
+    Revisit the ordered route and optimize the order of locations.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Time Complexity: O(n^2)
+    Space Complexity: O(n)
+    """
+
     while True:
         was_changed = False
         ordered_route_copy = run.ordered_route[:]
@@ -272,38 +449,58 @@ def _optimized_revisit(run: RouteRun):
             break
 
 
-def _in_close_proximity_of_undeliverable(run, in_location: Location) -> bool:
-    undeliverable_locations = get_undeliverable_locations(run)
-    for location in undeliverable_locations:
-        if location is in_location or location.distance(in_location) < 1:
-            return True
-    return False
-
-
-def get_undeliverable_locations(run: RouteRun):
-    undeliverable_locations = set()
-    location_package_dict = PackageHandler.get_location_package_dict()
-    for location, packages in location_package_dict.items():
-        for package in packages:
-            if not package.is_verified_address or package.status != DeliveryStatus.AT_HUB or (
-                    package.assigned_truck_id and package.assigned_truck_id != run.assigned_truck_id):
-                undeliverable_locations.add(location)
-    return undeliverable_locations
-
-
 def _get_delayed_locations(run: RouteRun):
+    """
+    Get the locations of delayed packages that are not available for the given route run.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Returns:
+        set: The set of delayed locations.
+
+    Time Complexity: O(n)
+    Space Complexity: O(n)
+    """
+
     delayed_packages = PackageHandler.get_delayed_packages(ignore_arrived=True)
     delayed_locations = PackageHandler.get_package_locations(delayed_packages)
     return delayed_locations.difference(_get_available_locations(run.start_time, ignore_assigned=True))
 
 
 def _get_unconfirmed_locations(run: RouteRun):
+    """
+    Get the locations of unconfirmed packages that are available for the given route run.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Returns:
+        set: The set of unconfirmed locations.
+
+    Time Complexity: O(n)
+    Space Complexity: O(n)
+    """
+
     unconfirmed_packages = PackageHandler.get_unconfirmed_packages()
     unconfirmed_locations = PackageHandler.get_package_locations(unconfirmed_packages)
     return unconfirmed_locations.intersection(_get_available_locations(run.start_time, ignore_assigned=True))
 
 
 def _get_assigned_truck_locations(run: RouteRun):
+    """
+    Get the locations of packages assigned to other trucks but not assigned to the given route run.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Returns:
+        set: The set of assigned truck locations.
+
+    Time Complexity: O(n)
+    Space Complexity: O(n)
+    """
+
     all_assigned_truck_packages = PackageHandler.get_assigned_truck_packages()
     all_run_assigned_packages = PackageHandler.get_assigned_truck_packages(truck_id=run.assigned_truck_id)
     all_assigned_truck_locations = PackageHandler.get_package_locations(all_assigned_truck_packages)
@@ -312,6 +509,21 @@ def _get_assigned_truck_locations(run: RouteRun):
 
 
 def _in_close_proximity_to_locations(in_location: Location, target_locations: Set[Location], distance=1.75) -> bool:
+    """
+    Check if the given location is in close proximity to any of the target locations.
+
+    Args:
+        in_location (Location): The input location.
+        target_locations (set): The set of target locations.
+        distance (float): The distance threshold for proximity.
+
+    Returns:
+        bool: True if the location is in close proximity to any of the target locations, False otherwise.
+
+    Time Complexity: O(n)
+    Space Complexity: O(1)
+    """
+
     for location in target_locations:
         if location.been_assigned:
             continue
@@ -320,24 +532,17 @@ def _in_close_proximity_to_locations(in_location: Location, target_locations: Se
     return False
 
 
-def _get_closest_neighbors(run: RouteRun):
-    sorted_location_dict = sorted(run.target_location.distance_dict.items(), key=lambda _location: _location[1])
-    closest_location = None
-    for location, distance in sorted_location_dict:
-        if (_is_valid_option(run, location, ) and
-                not _in_close_proximity_to_locations(location, _get_delayed_locations(run), distance=2.5)):
-            closest_location = location
-            break
-    next_closest_location = None
-    for location, distance in sorted_location_dict:
-        if (location is not closest_location and _is_valid_option(run, location, ) and
-                not _in_close_proximity_to_locations(location, _get_delayed_locations(run), distance=2.5)):
-            next_closest_location = location
-            break
-    return closest_location, next_closest_location
-
-
 def _set_locations_as_assigned(run: RouteRun):
+    """
+    Set the locations in the ordered route as assigned for the given route run.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Time Complexity: O(n * m)
+    Space Complexity: O(1)
+    """
+
     for location in run.ordered_route:
         if not location.is_hub:
             if location.has_bundled_package:
@@ -351,6 +556,20 @@ def _set_locations_as_assigned(run: RouteRun):
 
 
 def _set_assigned_truck_id_to_bundle_packages(run):
+    """
+    Assigns the truck ID to the bundled packages in the route run's ordered route.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Raises:
+        BundledPackageTruckAssignmentError: If the route run does not have an assigned truck ID.
+        InvalidRouteRunError: If a bundled package's location already has a different assigned truck ID.
+
+    Time Complexity: O(n * m), where n is the number of locations in the ordered route.
+    Space Complexity: O(1)
+    """
+
     if not run.assigned_truck_id:
         raise BundledPackageTruckAssignmentError
     for location in run.ordered_route:
@@ -365,6 +584,21 @@ def _set_assigned_truck_id_to_bundle_packages(run):
 
 
 def _get_available_locations(current_time: time, in_locations=PackageHandler.all_locations, ignore_assigned=True):
+    """
+    Returns the set of available locations based on the current time.
+
+    Args:
+        current_time (time): The current time.
+        in_locations (Set[Location]): The set of locations to consider.
+        ignore_assigned (bool): Whether to ignore locations that have already been assigned.
+
+    Returns:
+        Set[Location]: The available locations.
+
+    Time Complexity: O(n), where n is the number of locations in the input set.
+    Space Complexity: O(1)
+    """
+
     available_locations = set()
     for location in in_locations:
         if ignore_assigned and location.been_assigned or location.is_hub:
@@ -375,6 +609,19 @@ def _get_available_locations(current_time: time, in_locations=PackageHandler.all
 
 
 def _get_estimated_required_package_total(ordered_route_with_new_locations):
+    """
+    Calculates the estimated total number of packages required for the ordered route with new locations.
+
+    Args:
+        ordered_route_with_new_locations (List[Location]): The ordered route with new locations.
+
+    Returns:
+        int: The estimated total number of packages required to be on the truck.
+
+    Time Complexity: O(n)
+    Space Complexity: O(n)
+    """
+
     estimated_packages = set()
     for location in ordered_route_with_new_locations:
         if location.is_hub:
@@ -387,10 +634,37 @@ def _get_estimated_required_package_total(ordered_route_with_new_locations):
 
 
 def _is_earlier_time(first_time: time, second_time: time):
+    """
+    Checks if the first time is earlier than or equal to the second time.
+
+    Args:
+        first_time (time): The first time.
+        second_time (time): The second time.
+
+    Returns:
+        bool: True if the first time is earlier than or equal to the second time, False otherwise.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     return TimeConversion.is_time_at_or_before_other_time(first_time, second_time)
 
 
 def _get_run_analysis_dict(run: RouteRun):
+    """
+    Generates a dictionary containing analysis information for each location in the route run.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Returns:
+        dict: A dictionary containing analysis information for each location.
+
+    Time Complexity: O(n)
+    Space Complexity: O(n)
+    """
+
     run_analysis_dict = dict()
     packages_delivered = set()
     locations_visited = list()
@@ -408,10 +682,10 @@ def _get_run_analysis_dict(run: RouteRun):
         if not location.is_hub:
             packages_delivered.update(location.package_set)
         estimated_mileage = run.get_estimated_mileage_at_location(index=i)
-        estimated_time = TimeConversion.convert_miles_to_time(estimated_mileage, start_time=run.start_time)
+        estimated_time = TimeConversion.convert_miles_to_time(estimated_mileage, origin_time=run.start_time)
         estimated_mileage_at_next = run.get_estimated_mileage_at_location(index=i + 1) if next_location else None
         estimated_time_at_next = TimeConversion.convert_miles_to_time(
-            estimated_mileage_at_next, start_time=run.start_time) if next_location else None
+            estimated_mileage_at_next, origin_time=run.start_time) if next_location else None
         departure_requirement_met = True
         delivery_time_requirement_met = True
         if not location.is_hub:
@@ -476,20 +750,20 @@ def _get_run_analysis_dict(run: RouteRun):
     return run_analysis_dict
 
 
-def _simulate_load(run: RouteRun, truck: Truck):
-    for location in run.ordered_route:
-        if location.is_hub:
-            continue
-        for package in location.package_set:
-            truck.add_package(package)
-            if package.bundled_package_set:
-                for bundle_package in package.bundled_package_set:
-                    if not bundle_package.location.been_assigned:
-                        truck.add_package(bundle_package)
-    run.required_packages = truck.unload()
-
-
 def _check_requirements_met(run: RouteRun):
+    """
+    Checks if the requirements are met for each location in the route run.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Returns:
+        None
+
+    Time Complexity: O(n)
+    Space Complexity: O(1)
+    """
+
     for i, location in enumerate(run.ordered_route):
         if i == 0:
             continue
@@ -502,6 +776,19 @@ def _check_requirements_met(run: RouteRun):
 
 
 def _check_optimal_return_to_hub(run: RouteRun):
+    """
+    Checks if there is an opportunity for the truck to return to the hub optimally.
+
+    Args:
+        run (RouteRun): The route run.
+
+    Returns:
+        None
+
+    Time Complexity: O(n)
+    Space Complexity: O(1)
+    """
+
     if (run.package_total() + sum([len(location.package_set) for location in PackageHandler.all_locations
                                    if location.been_assigned]) != len(PackageHandler.all_packages)):
         for i, location in enumerate(run.ordered_route):
@@ -525,6 +812,20 @@ def _check_optimal_return_to_hub(run: RouteRun):
 
 
 def _analyze_run(run: RouteRun, truck: Truck):
+    """
+    Analyzes the route run and performs necessary optimizations and checks.
+
+    Args:
+        run (RouteRun): The route run.
+        truck (Truck): The truck assigned to the route run.
+
+    Returns:
+        RouteRun: The analyzed route run.
+
+    Time Complexity: O(n^2)
+    Space Complexity: O(n)
+    """
+
     run_analysis_dict = _get_run_analysis_dict(run)
     run.run_analysis_dict = run_analysis_dict
     if run.error_type and run.error_type is not LateDeliveryError:
@@ -536,10 +837,60 @@ def _analyze_run(run: RouteRun, truck: Truck):
     return run
 
 
+def _simulate_load(run: RouteRun, truck: Truck):
+    """
+    Simulates the loading of packages onto the truck for the route run.
+
+    Args:
+        run (RouteRun): The route run.
+        truck (Truck): The truck assigned to the route run.
+
+    Returns:
+        None
+
+    Time Complexity: O(n * m)
+    Space Complexity: O(n)
+    """
+
+    for location in run.ordered_route:
+        if location.is_hub:
+            continue
+        for package in location.package_set:
+            truck.add_package(package)
+            if package.bundled_package_set:
+                for bundle_package in package.bundled_package_set:
+                    if not bundle_package.location.been_assigned:
+                        truck.add_package(bundle_package)
+    run.required_packages = truck.unload()
+
+
 class RunPlanner:
+    """
+    A class that provides methods for planning and building route runs.
+
+    Methods:
+        build: Builds a route run based on the target location, truck, and other parameters.
+    """
 
     @staticmethod
     def build(target_location, truck: Truck, run_focus: RunFocus = None, start_time=config.DELIVERY_DISPATCH_TIME):
+        """
+        Builds a route run based on the target location, truck, and other parameters.
+
+        Args:
+            target_location (Location or dict): The target location for the route run. Can be a single location or a
+                dictionary containing paired target locations with their respective truck IDs.
+            truck (Truck): The truck assigned to the route run.
+            run_focus (RunFocus, optional): The run focus for the route run. Defaults to None.
+            start_time (time, optional): The start time for the route run. Defaults to config.DELIVERY_DISPATCH_TIME.
+
+        Returns:
+            RouteRun or None: The constructed route run if successful, None if an error occurs.
+
+        Time Complexity: O(n^2)
+        Space Complexity: O(1)
+        """
+
         run = RouteRun(start_time=start_time)
         run.target_location = target_location
         run.assigned_truck_id = truck.truck_id

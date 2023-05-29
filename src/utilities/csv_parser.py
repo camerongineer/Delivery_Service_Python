@@ -2,7 +2,7 @@ import csv
 import re
 from copy import copy
 from datetime import datetime, time
-from typing import List, Set
+from typing import List, Set, Tuple
 
 from src import config
 from src.constants.delivery_status import DeliveryStatus
@@ -16,6 +16,16 @@ __all__ = ['CsvParser']
 
 
 def _set_arrival_time(package: Package):
+    """
+    Sets the hub arrival time for a package based on its special note.
+
+    Args:
+        package (Package): The package to set the arrival time for.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     if package.special_note.startswith('Delayed'):
         match = re.search(r'(\d{1,2}):(\d{2})\s+(am|pm)', package.special_note)
         if match:
@@ -33,6 +43,16 @@ def _set_arrival_time(package: Package):
 
 
 def _set_assigned_truck(package: Package):
+    """
+    Sets the assigned truck for a package based on its special note.
+
+    Args:
+        package (Package): The package to set the assigned truck for.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     if package.special_note.startswith('Can only be on truck '):
         pattern = r'\d+'
         match = re.findall(pattern, package.special_note).pop()
@@ -42,6 +62,17 @@ def _set_assigned_truck(package: Package):
 
 
 def _set_earliest_location_deadline(location: Location, in_deadline_time: time):
+    """
+    Sets the earliest deadline for a location based on the given deadline time.
+
+    Args:
+        location (Location): The location to set the earliest deadline for.
+        in_deadline_time (time): The new deadline time.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     current_location_deadline = TimeConversion.get_datetime(location.earliest_deadline)
     in_deadline = TimeConversion.get_datetime(in_deadline_time)
     if in_deadline < current_location_deadline:
@@ -49,6 +80,17 @@ def _set_earliest_location_deadline(location: Location, in_deadline_time: time):
 
 
 def _set_latest_location_package_arrival(location: Location, in_arrival_time: time):
+    """
+    Sets the latest package arrival time for a location based on the given arrival time.
+
+    Args:
+        location (Location): The location to set the latest package arrival time for.
+        in_arrival_time (time): The new arrival time.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     if not location.latest_package_arrival:
         location.latest_package_arrival = in_arrival_time
     else:
@@ -58,7 +100,17 @@ def _set_latest_location_package_arrival(location: Location, in_arrival_time: ti
             location.latest_package_arrival = in_arrival_time
 
 
-def _set_bundled_packages_ids(package):
+def _set_bundled_packages_ids(package: Package):
+    """
+    Sets the bundled package IDs for a package based on its special note.
+
+    Args:
+        package (Package): The package to set the bundled package IDs for.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     if str(package.special_note).startswith('Must be delivered with '):
         pattern = r'\d+'
         package_ids = [int(match) for match in re.findall(pattern, package.special_note)]
@@ -67,6 +119,19 @@ def _set_bundled_packages_ids(package):
 
 
 def _get_bundle_id_sets(packages: List[Package]) -> List[Set[int]]:
+    """
+    Returns a list of sets, where each set represents a bundle of package IDs.
+
+    Args:
+        packages (List[Package]): The list of packages to group into bundles.
+
+    Returns:
+        List[Set[int]]: A list of sets, where each set represents a bundle of package IDs.
+
+    Time Complexity: O(n * m)
+    Space Complexity: O(n)
+    """
+
     bundle_id_sets = []
     for package in packages:
         if package.bundled_package_ids:
@@ -89,7 +154,20 @@ def _get_bundle_id_sets(packages: List[Package]) -> List[Set[int]]:
     return bundle_id_sets
 
 
-def _union_id_sets(bundle_id_list):
+def _union_id_sets(bundle_id_list: List[frozenset]):
+    """
+    Performs a union operation on a list of sets and returns the resulting set.
+
+    Args:
+        bundle_id_list (List[frozenset]): The list of sets to perform the union operation on.
+
+    Returns:
+        Set[int]: The resulting set after performing the union operation on the input sets.
+
+    Time Complexity: O(n)
+    Space Complexity: O(n)
+    """
+
     if len(bundle_id_list) == 1:
         return bundle_id_list[0]
     else:
@@ -100,6 +178,16 @@ def _union_id_sets(bundle_id_list):
 
 
 def _set_bundled_packages(packages: List[Package]):
+    """
+    Sets the bundled package information for the given list of packages.
+
+    Args:
+        packages (List[Package]): The list of packages to set the bundled package information for.
+
+    Time Complexity: O(n * m * k)
+    Space Complexity: O(n + m)
+    """
+
     bundle_id_sets = list(map(frozenset, _get_bundle_id_sets(packages)))
     bundle_id_sets = list(set(bundle_id_sets))
     bundle_id_sets = [{s for s in _union_id_sets(bundle_id_sets)}]
@@ -119,8 +207,23 @@ def _set_bundled_packages(packages: List[Package]):
 
 
 class CsvParser:
+    """Parses CSV files to initialize locations and packages."""
+
     @staticmethod
-    def initialize_locations(filepath=config.DISTANCE_CSV_FILE):
+    def initialize_locations(filepath=config.DISTANCE_CSV_FILE) -> Tuple[Location]:
+        """
+        Initializes and returns a list of Location objects based on the data from a CSV file.
+
+        Args:
+            filepath (str): The filepath of the CSV file containing location data.
+
+        Returns:
+            Tuple[Location]: The tuple of Location objects initialized from the CSV file.
+
+        Time Complexity: O(n^2)
+        Space Complexity: O(n^2)
+        """
+
         locations = []
         with open(filepath) as csv_file:
             columns = csv.reader(csv_file).__next__()
@@ -172,10 +275,25 @@ class CsvParser:
                 locations[i].set_distance_dict(distance_dict)
                 if not locations[i].is_hub:
                     locations[i].hub_distance = locations[i].distance_dict[Truck.hub_location]
-        return locations
+        return tuple(locations)
 
     @staticmethod
-    def initialize_packages(locations: Set[Location], filepath=config.PACKAGE_CSV_FILE):
+    def initialize_packages(locations: Tuple[Location], filepath=config.PACKAGE_CSV_FILE) -> Tuple[Package]:
+        """
+        Initializes and returns a list of Package objects based on the data from a CSV file
+            and the provided set of Location objects.
+
+        Args:
+            locations (Set[Location]): The set of Location objects used for package initialization.
+            filepath (str): The filepath of the CSV file containing package data.
+
+        Returns:
+            Tuple[Package]: The tuple of Package objects initialized from the CSV file.
+
+        Time Complexity: O(n * m)
+        Space Complexity: O(n + m)
+        """
+
         packages = []
         with open(filepath, newline='') as csv_file:
             reader = csv.DictReader(csv_file)
@@ -213,4 +331,4 @@ class CsvParser:
                 packages.append(package)
                 package.location.package_set.add(package)
             _set_bundled_packages(packages)
-        return packages
+        return tuple(packages)

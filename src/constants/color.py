@@ -2,6 +2,8 @@ from enum import Enum
 
 
 class Color(Enum):
+    """Enum class representing various colors for terminal output."""
+
     RED = '\033[31m'
     GREEN = '\033[32m'
     YELLOW = '\033[33m'
@@ -14,4 +16,3 @@ class Color(Enum):
     BRIGHT_MAGENTA = '\033[35;1m'
     BRIGHT_CYAN = '\033[36;1m'
     COLOR_ESCAPE = '\033[0m'
-

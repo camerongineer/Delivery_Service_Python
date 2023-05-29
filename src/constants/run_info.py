@@ -2,6 +2,8 @@ from enum import Enum
 
 
 class RunInfo(Enum):
+    """Enum class representing information accessed in the run analysis dictionary of a route run"""
+
     PREVIOUS_LOCATION = 'Previous location of the run'
     MILES_FROM_PREVIOUS = 'Mile away from previous location'
     ESTIMATED_MILEAGE = 'Estimated mileage at arrival'

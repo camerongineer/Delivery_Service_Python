@@ -4,6 +4,8 @@ __all__ = ['State']
 
 
 class State(Enum):
+    """Enum class representing a state in the USA."""
+
     ALABAMA = 'AL'
     ALASKA = 'AK'
     ARIZONA = 'AZ'
@@ -56,4 +58,14 @@ class State(Enum):
     WYOMING = 'WY'
 
     def __init__(self, abbreviation):
+        """
+        Initialize a State instance.
+
+        Args:
+            abbreviation (str): The abbreviation of the state.
+
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+        """
+
         self.abbreviation = abbreviation

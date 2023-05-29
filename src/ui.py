@@ -8,28 +8,58 @@ from src.utilities.package_handler import PackageHandler
 
 
 def _simulation():
+    """
+    Performs the simulation and displays a completion message.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     UI.print(f'\n\n\nSimulation complete', think=True, color=Color.RED, sleep_seconds=6, log_enabled=False)
     _clear()
 
 
 def _clear():
+    """
+    Clears the console by printing new lines.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     for i in range(100):
         print()
 
 
 def _retrieve_status_of_all_packages():
+    """
+    Retrieves the status of all packages and displays them.
+
+    Time Complexity: O(n)
+    Space Complexity: O(1)
+    """
+
     _clear()
     address_length = max([len(location.get_full_address()) for location in PackageHandler.all_locations])
     for i in range(1, len(PackageHandler.all_packages) + 1):
         snapshot_package = PackageHandler.get_package_snapshot(PackageHandler.package_hash.get_package(i),
                                                                target_time=UI.TIME)
+        color = (snapshot_package.status.color if not isinstance(snapshot_package.status, tuple) else
+                 snapshot_package.status[-1].color)
         UI.print(snapshot_package.get_status_string(UI.TIME, address_length=address_length), sleep_seconds=.25,
-                 color=snapshot_package.status.color, log_enabled=False)
+                 color=color, log_enabled=False)
     UI.press_enter_to_continue()
     _clear()
 
 
 def _retrieve_package_details():
+    """
+    Retrieves the details of a specific package.
+
+    Time Complexity: O(n log n)
+    Space Complexity: O(n)
+    """
+
     while True:
         _clear()
         UI.print('Please enter the ID number of the package', log_enabled=False)
@@ -55,6 +85,13 @@ def _retrieve_package_details():
 
 
 def _time_machine():
+    """
+    Allows the user to input a time to transport to.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     _clear()
     while True:
         UI.print(f'Please input a time below between "04:00"-"18:59" that you would like to be transport to',
@@ -72,6 +109,13 @@ def _time_machine():
 
 
 def _view_log():
+    """
+    Displays the log file.
+
+    Time Complexity: O(n)
+    Space Complexity: O(1)
+    """
+
     UI.print('Transporting to end of day', think=True, color=Color.RED, sleep_seconds=1, log_enabled=False)
     print('\n\n')
     for line in UI.LOG_FILE.splitlines():
@@ -86,6 +130,13 @@ def _view_log():
 
 
 def _adjust_ui_speed():
+    """
+    Allows the user to adjust the UI speed.
+
+    Time Complexity: O(1)
+    Space Complexity: O(1)
+    """
+
     _clear()
     UI.print(UI.UNDERLINE + f'Current Speed: {UI.SPEED // 100}' + Color.COLOR_ESCAPE.value)
     while True:
@@ -117,6 +168,21 @@ class UI:
     @staticmethod
     def print(output: str, sleep_seconds: float = 0, color: Color = None, think=False, extra_lines=0,
               log_enabled=True):
+        """
+        Prints a message to the console.
+
+        Args:
+            output (str): The message to print.
+            sleep_seconds (float): The number of seconds to sleep after printing the message (default: 0).
+            color (Color): The color of the message (default: None).
+            think (bool): Indicates if the message should be displayed as if it's thinking (default: False).
+            extra_lines (int): The number of extra lines to print after the message (default: 0).
+            log_enabled (bool): Indicates if the message should be logged (default: True).
+
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+        """
+
         if not config.UI_ELEMENTS_ENABLED:
             color = None
             sleep_seconds = 0
@@ -137,6 +203,8 @@ class UI:
                           end='', flush=True)
                     sleep(1.5 / (config.UI_SPEED / 100))
             print()
+        if extra_lines > 100:
+            extra_lines = 100
         for _ in range(extra_lines):
             if log_enabled:
                 UI.LOG_FILE += '\n'
@@ -144,6 +212,16 @@ class UI:
 
     @staticmethod
     def press_enter_to_continue(simulation_end=False):
+        """
+        Waits for the user to press the Enter key.
+
+        Args:
+            simulation_end (bool): Indicates if simulation should be called afterwords (default: False).
+
+        Time Complexity: O(1)
+        Space Complexity: O(1)
+        """
+
         if config.UI_ENABLED and config.UI_ELEMENTS_ENABLED:
             input('\n\nPress Enter key to continue...')
             print('\n\n')
@@ -152,6 +230,13 @@ class UI:
 
     @staticmethod
     def menu():
+        """
+        Displays the main menu and handles user input.
+
+        Time Complexity: O(n log n)
+        Space Complexity: O(n)
+        """
+
         UI.print(UI.UNDERLINE + 'Welcome to the WGUPS Parcel Service Terminal' + Color.COLOR_ESCAPE.value,
                  color=Color.BRIGHT_BLUE, sleep_seconds=4, extra_lines=2, log_enabled=False)
         while True:

@@ -23,19 +23,6 @@ class TestTimeConversion(TestCase):
         assert TimeConversion.convert_miles_to_time(miles, start_time, 0) != time(hour=9)
         assert TimeConversion.convert_miles_to_time(miles, start_time, 0) == time(hour=10)
 
-    def test_get_paused_seconds(self):
-        pause_ledger = dict()
-        current_time = time(hour=10)
-        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 0
-        pause_ledger[time(hour=9)] = time(hour=9, minute=30)
-        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 30
-        pause_ledger[time(hour=10)] = time(hour=10, minute=30)
-        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 30
-        current_time = time(hour=10, minute=15)
-        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 45
-        current_time = time(hour=10, minute=30)
-        assert TimeConversion.get_paused_seconds(pause_ledger, current_time) == 60 * 60
-
     def test_add_time_delta(self):
         current_time = time(hour=9)
         delta_seconds = 1800
