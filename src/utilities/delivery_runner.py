@@ -325,7 +325,7 @@ class DeliveryRunner:
         """
         Commences the package deliveries.
 
-        Time Complexity: O(n^2)
+        Time Complexity: O(n^2 * m)
         Space Complexity: O(n)
         """
 

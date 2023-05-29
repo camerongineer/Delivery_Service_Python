@@ -193,7 +193,7 @@ class UI:
             output = color.value + output + Color.COLOR_ESCAPE.value
         if config.UI_ENABLED:
             print(output, end='' if think else '\n')
-            sleep(sleep_seconds / (config.UI_SPEED / 100))
+            sleep(sleep_seconds / (UI.SPEED / 100))
         if log_enabled:
             UI.LOG_FILE += (output + '\n')
         if think:
@@ -201,7 +201,7 @@ class UI:
                 if config.UI_ENABLED:
                     print((color.value if color else '') + '.' + (Color.COLOR_ESCAPE.value if color else ''),
                           end='', flush=True)
-                    sleep(1.5 / (config.UI_SPEED / 100))
+                    sleep(1.5 / (UI.SPEED / 100))
             print()
         if extra_lines > 100:
             extra_lines = 100
