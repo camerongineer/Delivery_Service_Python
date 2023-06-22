@@ -9,8 +9,6 @@ def main():
     - Commences the deliveries.
     - Displays the user interface menu.
 
-    Time Complexity: O(n^2 * m)
-    Space Complexity: O(n^2)
     """
 
     DeliveryRunner.load_trucks()

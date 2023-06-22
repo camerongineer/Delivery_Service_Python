@@ -237,7 +237,7 @@ class UI:
         Space Complexity: O(n)
         """
 
-        UI.print(UI.UNDERLINE + 'Welcome to the WGUPS Parcel Service Terminal' + Color.COLOR_ESCAPE.value,
+        UI.print(UI.UNDERLINE + 'Welcome to the Delivery Service Terminal' + Color.COLOR_ESCAPE.value,
                  color=Color.BRIGHT_BLUE, sleep_seconds=4, extra_lines=2, log_enabled=False)
         while True:
             UI.print(f'The current time is {UI.TIME}', sleep_seconds=3, extra_lines=2, color=Color.YELLOW
