@@ -6,20 +6,21 @@ The Delivery Service program is designed build and optimize the delivery routes 
 
 - Fully-automated efficient delivery route planning to minimize miles traveled
   ![Sequence 01](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/92217851-5895-4473-ada0-6a488b0d5340)
-  ![Sequence 01_5](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/26b46189-c551-407d-88b3-b0ef6531842e)
+  ![Sequence 01_5](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/8fe237a5-a5c6-4df3-bd54-190a2f696b11)
 
 - Consideration of constraints such as truck assignments, package deadlines, and delays
-  ![Sequence 01_6](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/74b547b7-f927-475e-b7b5-77d02da498ba)
+  ![Sequence 01_6](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/8202cf93-f198-40f4-9ee6-6ffe95bf2d79)
 
 - Truck loading with capacity constraints
-  ![Sequence 01_9](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/84bfe19e-e838-40bc-9d8b-24a112fa4e3b)
+  ![Sequence 01_9](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/44c57b1f-848d-46bb-9092-19a4731e980c)
 
 - Run delivery simulations
-  ![Sequence 01_13](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/0ad26c8d-7ae4-4054-9a2c-d21d2fb55b8e)
+  ![Sequence 01_13](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/946a4147-46e3-44ae-bb5b-e1c7b927337c)
 
 - Menu system to view the status of packages individually or collectively
-  ![Sequence 01_11](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/df5082b5-1385-4c0f-b1c3-bf48e31e6c04)
-  ![Sequence 01_12](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/db86c29c-2845-4acb-a93d-77e025dd91b0)
+  ![Sequence 01_11](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/eebaa65d-e5f0-47e8-a6e8-f0b8902cca6f)
+  ![Sequence 01_12](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/0576a036-8be6-4953-990c-cb1a2348567b)
+
 
 
 ## Prerequisites
