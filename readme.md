@@ -5,7 +5,7 @@ The Delivery Service program is designed build and optimize the delivery routes 
 ## Features
 
 - Fully-automated efficient delivery route planning to minimize miles traveled
-  ![Sequence 01](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/92217851-5895-4473-ada0-6a488b0d5340)
+  ![Sequence 01](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/27e297ca-a6d1-4a33-8ce4-36ba82684e50)
   ![Sequence 01_5](https://github.com/camerongineer/Delivery_Service_Python/assets/93474097/8fe237a5-a5c6-4df3-bd54-190a2f696b11)
 
 - Consideration of constraints such as truck assignments, package deadlines, and delays
