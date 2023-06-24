@@ -35,18 +35,19 @@ The Delivery Service program is designed build and optimize the delivery routes 
    git clone https://github.com/camerongineer/delivery_service_python.git
    ```
 
-2. Change to the project directory:
+
+## Usage
+
+1. Change to the project directory:
 
    ```
    cd delivery_service_python
    ```
 
-## Usage
-
-1. Run the program:
+2. Run the program:
 
    ```
    python main.py
    ```
 
-2. Follow the on-screen prompts and menu options to navigate the program.
+3. Follow the on-screen prompts and menu options to navigate the program.
